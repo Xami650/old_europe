@@ -24,7 +24,7 @@ library(RColorBrewer)
 
 source("utilidades.R")
 
-data_raw <- read_rds("data.rds")
+data_raw <- read_rds("../data/data.rds")
 
 # Limpieza y Adaptación
 data_clean <- data_raw %>%
@@ -42,7 +42,7 @@ data_clean <- data_raw %>%
   ) %>%
   filter(!is.na(value))
 
-geoj_nuts0 <- readRDS("geoj_nuts0.rds")
+geoj_nuts0 <- readRDS("../data/geoj_nuts0.rds")
 ```
 
 ```{r}
@@ -1017,7 +1017,7 @@ modelos_yj <- reactive({
   if (input$pais_yj == "Unión Europea"){
     df <- data_clean %>%
       filter(
-        NUTS == "EU27_2020",
+        NUTS_ID == "EU27_2020",
         indic_de == input$indic_yj,
         PROJ == input$proj_yj
       ) %>%

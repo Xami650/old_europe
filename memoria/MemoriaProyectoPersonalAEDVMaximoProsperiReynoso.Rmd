@@ -14,7 +14,7 @@ output:
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
-  cache=FALSE, # ponerlo a TRUE acelera la compilación pues solo recompila los chunks modificados. Es útil al escribir texto con mucho código que tarda tiempo en compilar. Puede fallar cuando unos chunks dependen de otros. En ese caso, o cuando hay errores que no entiendes, borra la carpeta auxiliar que se genera con la extensión "_cache" para obligar a recompilar todo. 
+  cache=FALSE, # ponerlo a TRUE acelera la compilación pues solo recompila los chunks modificados. Es útil al escribir texto con mucho código que tarda tiempo en compilar. Puede fallar cuando unos chunks dependen de otros. En ese caso, o cuando hay errores que no entiendes, borra la carpeta auxiliar que se genera con la extensión "_cache" para obligar a recompilar todo.
   echo=FALSE
 )
 ```
@@ -43,7 +43,7 @@ library(eurostat)
 library(lubridate)
 library(tibble)
 library(tsibble)
-source("utilidades.R")
+source("../R/utilidades.R")
 
 # asociamos funciones a determinadas librerías para evitar posibles errores 
 filter <- dplyr::filter # Filtra filas según condiciones
@@ -68,7 +68,7 @@ selectInput <- shiny::selectInput
 
 <!-- Añadir imagen ilustrativa del tema de mi proyecto -->
 
-<center><img src="demografia.png" width="60%"/></center>
+<center><img src="../img/demografia.png" width="60%"/></center>
 
 # **Introducción**
 
@@ -142,7 +142,7 @@ El análisis comparativo entre países europeos está estrechamente relacionado 
 
 
 ```{r}
-tb <- read.xlsx("ODS.xlsx") %>%
+tb <- read.xlsx("../data/ODS.xlsx") %>%
   as_tibble()
 tb[is.na(tb)] <- ""
 
@@ -751,14 +751,14 @@ data <- bind_rows(data.tidy, data.tidy2,
   arrange(country, indic_de, date) %>%
   group_by(NUTS, indic_de) %>%
   ungroup()
-saveRDS(data, "data.rds")
+saveRDS(data, "../data/data.rds")
 ```
 
 ## **Preparación de los datos**
 
 
 ```{r, echo=FALSE}
-data_raw <- read_rds("data.rds")
+data_raw <- read_rds("../data/data.rds")
 ```
 
 ```{r, echo=FALSE}
@@ -777,7 +777,7 @@ data_clean <- data_raw %>%
   ) %>%
   filter(!is.na(value))
 
-geoj_nuts0 <- readRDS("geoj_nuts0.rds")
+geoj_nuts0 <- readRDS("../data/geoj_nuts0.rds")
 
 ```
 
