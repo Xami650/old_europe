@@ -1,0 +1,25 @@
+# Historia y datos de sesión de R
+.Rhistory
+.RData
+.Rhistory.*
+_RData
+_Rhistory
+.Rapp.history
+
+# Archivos de usuario de RStudio
+.Rproj.user/
+*.Rproj
+
+# Salidas temporales de RMarkdown / knitr
+*_cache/
+*_files/
+*.knit.md
+*.utf8.md
+
+# Entorno renv (descomenta si usas renv)
+# renv/library/
+# renv/local/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

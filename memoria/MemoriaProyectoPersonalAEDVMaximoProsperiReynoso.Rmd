@@ -1,0 +1,1602 @@
+---
+title: "La balanza inclinada. El problema de la población envejecida."
+author: "Máximo Prosperi Reynoso"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: true
+---
+
+<!-- Opcionalmente, el formateo de este documento en HTML se puede mejorar usando CSS -->
+
+```{r,echo=FALSE}
+# OPCIONES POR DEFECTO AL COMPILAR LOS CHUNKS 
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  cache=FALSE, # ponerlo a TRUE acelera la compilación pues solo recompila los chunks modificados. Es útil al escribir texto con mucho código que tarda tiempo en compilar. Puede fallar cuando unos chunks dependen de otros. En ese caso, o cuando hay errores que no entiendes, borra la carpeta auxiliar que se genera con la extensión "_cache" para obligar a recompilar todo. 
+  echo=FALSE
+)
+```
+
+```{r global, include=FALSE}
+# carga de librerías
+library(DT)
+library(tinytex)
+library(googlesheets4)
+library(kableExtra)
+library(patchwork)
+library(zoo)
+library(MASS)
+library(flexdashboard)
+library(datasets)
+library(highcharter) 
+library(fpp3)
+library(RColorBrewer)
+library(openxlsx)  
+library(leaflet)  
+library(geojsonio)
+library(plotly)
+library(ggplot2)
+library(tidyverse)
+library(eurostat)
+library(lubridate)
+library(tibble)
+library(tsibble)
+source("utilidades.R")
+
+# asociamos funciones a determinadas librerías para evitar posibles errores 
+filter <- dplyr::filter # Filtra filas según condiciones
+select <- dplyr::select # Selecciona columnas
+mutate <- dplyr::mutate # Crea o modifica columnas
+arrange <- dplyr::arrange # Ordena filas
+group_by <- dplyr::group_by # Agrupa datos
+summarise <- dplyr::summarise # Resume variables (por ejemplo, con medias, conteos)
+summarize <- dplyr::summarize # Lo mismo que summarise
+rename <- dplyr::rename # Cambia nombres de columnas
+distinct <- dplyr::distinct # Elimina filas duplicadas
+slice<- dplyr::slice # Selecciona filas por posición
+relocate<- dplyr::relocate # Reordena columnas
+recode <- dplyr::recode # Renombra atributos de una variable
+
+selectInput <- shiny::selectInput
+```
+
+<!-- Todos los proyectos personales tienen que tener un cuadro de mandos (Tema 7 de la asignatura) cuya dirección es similar a la que sigue poniendo tu nº de usuario (en lugar de a2405) y el nombre del Rmd asociado. Los cuadros de mando se alojan en un servidor del DIS y solo se puede acceder a ellos a través de la red de la ULPGC o usando VPN -->
+
+[Cuadro de mandos](http://10.22.143.222:3838/sample-apps/a2652/DashboardMaximoPR.Rmd)
+
+<!-- Añadir imagen ilustrativa del tema de mi proyecto -->
+
+<center><img src="demografia.png" width="60%"/></center>
+
+# **Introducción**
+
+En las últimas décadas, Europa ha experimentado transformaciones demográficas profundas que afectan de manera directa al desarrollo económico, social y territorial de los Estados miembros.
+El envejecimiento progresivo de la población, la disminución de las tasas de natalidad y los movimientos migratorios configuran un escenario en el que comprender la evolución y distribución de la población se ha convertido en una necesidad estratégica tanto para responsables públicos como para instituciones académicas y sociales.
+Estas dinámicas no solo influyen en la sostenibilidad de los sistemas de bienestar, sino también en el mercado laboral, la planificación urbana, la educación, la sanidad y la competitividad de los territorios.
+
+Dentro de este contexto amplio, este proyecto se centra en analizar la estructura poblacional de los países europeos, utilizando datos procedentes de Eurostat y técnicas de análisis exploratorio, visualización interactiva y modelización estadística.
+Aunque el envejecimiento es un fenómeno generalizado en Europa, no todas las regiones lo experimentan con la misma intensidad.
+Esta heterogeneidad territorial constituye el problema específico que se aborda: las diferencias significativas en la evolución demográfica entre países y regiones, y cómo dichas diferencias pueden influir en su realidad socioeconómica presente y futura.
+
+## **Estado actual**
+
+El análisis demográfico en Europa ha adquirido una importancia creciente debido al conjunto de tendencias que caracterizan la evolución poblacional del continente.
+Entre los conceptos clave que enmarcan este estudio destacan el envejecimiento de la población, la tasa de dependencia, la evolución de los grupos de edad, las proyecciones demográficas y la desigual distribución territorial de estos fenómenos.
+En términos generales, Europa presenta una de las poblaciones más envejecidas del mundo, resultado del aumento de la esperanza de vida y el descenso continuado de la natalidad.
+Este proceso plantea desafíos significativos como la sostenibilidad del sistema de pensiones, la presión sobre los servicios sanitarios y la necesidad de adaptar el mercado laboral y las estructuras productivas.
+
+Diversos estudios de organismos internacionales (Comisión Europea, Eurostat y la OCDE) han analizado estas dinámicas, subrayando que el envejecimiento no afecta de forma uniforme a todos los países ni regiones.
+Investigaciones recientes muestran que territorios del sur y este de Europa presentan tasas de dependencia más elevadas y un menor relevo generacional, mientras que otros países mantienen una estructura demográfica más equilibrada debido a mayores tasas de natalidad o a una inmigración más sostenida.
+Estas diferencias territoriales justifican la necesidad de herramientas que permitan explorar de forma detallada la evolución de los indicadores demográficos y comparar su comportamiento en distintos niveles geográficos.
+
+## **Motivación**
+
+La motivación principal para realizar este proyecto surge de mi interés personal por comprender en profundidad la situación demográfica de Europa y, en particular, el avance del envejecimiento poblacional.
+Este fenómeno, cada vez más visible en la mayoría de los Estados miembros, plantea interrogantes importantes sobre el futuro económico y social de la Unión Europea.
+En el caso de España, donde el proceso de envejecimiento es especialmente acusado, analizar su evolución adquiere una relevancia aún mayor, ya que puede influir directamente en la sostenibilidad del mercado laboral, del sistema de pensiones y de los servicios públicos.
+
+Me interesa explorar cómo estas tendencias demográficas afectan de manera diferente a cada país y qué implicaciones pueden tener tanto para el funcionamiento conjunto de la Unión Europea como para el desarrollo individual de España. Esta perspectiva comparativa permite entender mejor las desigualdades, retos y oportunidades que existen dentro del espacio europeo.
+
+Además, desde el punto de vista académico y profesional, este proyecto supone una oportunidad para aplicar técnicas de análisis y visualización de datos a un problema real, utilizando fuentes oficiales como Eurostat y herramientas avanzadas de ciencia de datos. La creación de un cuadro de mandos interactivo no solo facilita la interpretación de los resultados, sino que también refuerza mi interés por desarrollar soluciones accesibles para la comunicación de información compleja.
+
+## **Objetivos**
+
+El propósito principal de este trabajo es analizar la evolución demográfica de los países europeos, con especial atención al envejecimiento de la población, y desarrollar una herramienta interactiva que permita visualizar, comparar y proyectar estos cambios de manera accesible. Para alcanzar este propósito general, se establecen los siguientes objetivos:
+
+  **1.** Examinar la estructura poblacional europea mediante indicadores clave con el fin de comprender las tendencias actuales.
+
+  **2.** Comparar la evolución demográfica entre países para identificar diferencias significativas, patrones territoriales y comportamientos divergentes dentro de la Unión Europea.
+
+  **3.** Analizar en detalle la situación de España en el contexto europeo, evaluando su posición relativa y la intensidad del proceso de envejecimiento respecto a otros países.
+
+  **4.** Construir un cuadro de mandos interactivo utilizando RMarkdown, Shiny y Plotly, que permita explorar los datos de forma dinámica y facilite la interpretación visual de los indicadores.
+
+  **5.** Implementar modelos predictivos basados en ARIMA con el objetivo de estimar la evolución futura de determinados indicadores poblacionales y analizar posibles escenarios.
+
+  **6.** Integrar información procedente de Eurostat de manera estructurada y reproducible, garantizando la coherencia y calidad del procesamiento de datos.
+
+  **7.** Generar una herramienta útil y clara tanto para usuarios académicos como para personas interesadas en comprender la situación demográfica europea, favoreciendo la comunicación de datos complejos mediante visualizaciones intuitivas.
+
+
+# **Aportaciones del trabajo**
+
+<!-- estas sección se suele escribir al final del trabajo -->
+
+## **Principales aportaciones**
+
+Este trabajo ofrece una visión clara y actualizada sobre la evolución demográfica en Europa, destacando especialmente el proceso de envejecimiento y sus diferencias entre países. La integración y análisis de datos oficiales de Eurostat permiten identificar patrones territoriales relevantes y situar la situación de España dentro del contexto europeo.
+
+La aportación central del proyecto es el cuadro de mandos interactivo, que reúne en una única herramienta visualizaciones dinámicas, comparativas regionales y modelos predictivos. Este dashboard facilita la exploración intuitiva de los indicadores poblacionales y mejora la comprensión de un fenómeno complejo mediante gráficos, mapas y proyecciones.
+
+Además, la inclusión de modelos ARIMA aporta una perspectiva prospectiva, permitiendo estimar la evolución futura de determinados indicadores y complementando el análisis descriptivo con información predictiva. En conjunto, el trabajo contribuye a actualizar el conocimiento existente y ofrece un recurso accesible para estudiar la realidad demográfica europea.
+
+## **Alineamiento con los objetivos de desarrollo sostenible**
+
+El análisis demográfico realizado en este proyecto se relaciona de forma directa con varios Objetivos de Desarrollo Sostenible **(ODS)**, ya que la evolución de la población y el envejecimiento influyen en múltiples dimensiones sociales, económicas y territoriales.
+
+En primer lugar, el proyecto contribuye al **ODS 3 (Salud y Bienestar)** al estudiar tendencias poblacionales que condicionan la planificación de recursos sanitarios y la atención a personas mayores. También se vincula con el **ODS 4 (Educación de calidad)** y el **ODS 5 (Igualdad de género)**, dado que los cambios demográficos afectan a la estructura educativa, a la participación laboral de distintos grupos y a la distribución de responsabilidades de cuidados.
+
+El análisis comparativo entre países europeos está estrechamente relacionado con el **ODS 10 (Reducción de las desigualdades)**, ya que permite identificar diferencias territoriales significativas en el envejecimiento y la evolución de la población. Asimismo, estudiar la sostenibilidad demográfica y su impacto en los recursos y servicios públicos se conecta con el ODS ***11 (Ciudades y comunidades sostenibles)*** y el ***ODS 12 (Producción y consumo sostenibles)**.
+
+
+```{r}
+tb <- read.xlsx("ODS.xlsx") %>%
+  as_tibble()
+tb[is.na(tb)] <- ""
+
+colnames(tb) <- c("ODS","No procede", "Bajo", "Medio","Alto")
+tabla <- kable(tb,caption="Grado de relación del proyecto con los objetivos de desarrollo sostenible (ODS)", 
+                format = "html",
+                table.attr = 'style="width:500px; margin-left: auto; margin-right: auto;"') 
+tabla %>% column_spec(2, extra_css = "text-align: center;") %>%
+          column_spec(3, extra_css = "text-align: center;") %>%
+          column_spec(4, extra_css = "text-align: center;") %>%
+          column_spec(5, extra_css = "text-align: center;")
+```
+
+# **Desarrollo**
+
+## **Herramientas empleadas**
+
+El desarrollo del proyecto requirió un conjunto de herramientas de software orientadas al análisis estadístico, la manipulación de datos, la visualización avanzada y la creación del cuadro de mandos interactivo. A continuación se detallan las principales tecnologías utilizadas y la justificación de su uso.
+
+### **R y RStudio**
+
+Se emplearon **R** y **RStudio** como entorno principal de trabajo por varias razones:
+
+- **R** es un lenguaje ampliamente utilizado en análisis demográfico, estadística y modelización, lo que lo hace idóneo para trabajar con series temporales, correlaciones y transformaciones estadísticas.
+- **RStudio** proporciona un entorno integrado que facilita la ejecución de scripts, el control de versiones, la generación de documentos RMarkdown y el desarrollo de aplicaciones *Shiny*.
+
+### **Paquetes utilizados**
+
+A lo largo del proyecto se emplearon las siguientes librerías:
+
+- **tidyverse**: Manejo y limpieza de datos (`dplyr`, `tidyr`, `tibble`), construcción de tablas tidy y transformaciones necesarias para el modelado.
+- **eurostat**: Descarga directa de datasets oficiales de Eurostat, incluyendo proyecciones demográficas y series históricas.
+- **readxl / openxlsx**: Lectura y tratamiento de hojas de cálculo auxiliares.
+- **leaflet**: Construcción de mapas coropléticos interactivos para representar indicadores demográficos a nivel país.
+- **plotly**: Visualización interactiva de series temporales, gráficos comparativos y transformaciones estadísticas.
+- **ggplot2**: Generación de gráficos estáticos de alta calidad integrados en el documento.
+- **tsibble**, **fable**, **fabletools**: Estructuración de series temporales, modelización ARIMA y generación de predicciones con intervalos de confianza.
+- **DT**: Visualización de tablas interactivas presentes en la memoria.
+- **highcharter**: Visualización del PCA y gráficos avanzados en el dashboard.
+- **shiny / flexdashboard**: Construcción del cuadro de mandos interactivo que integra todos los resultados.
+
+Cada una de estas librerías fue seleccionada por su eficiencia, compatibilidad con las demás herramientas del proyecto y capacidad para representar los datos de forma clara y flexible.
+
+### **Servidor Shiny del Departamento de Ingeniería de Sistemas de la ULPGC (DIS)**
+
+El despliegue público del cuadro de mandos se realizó a través del **servidor Shiny ofrecido por el DIS**. Se utilizó por las siguientes razones:
+
+- Permite alojar dashboards sin necesidad de infraestructura propia.
+- Está optimizado para proyectos académicos y para cargas de trabajo asociadas a visualizaciones interactivas.
+- Facilita el acceso público al panel, permitiendo que cualquier usuario pueda explorar los indicadores, proyecciones y modelos generados.
+- Garantiza un entorno estable, seguro y compatible con las versiones empleadas de R y las librerías del proyecto.
+
+El uso del servidor Shiny del DIS permitió integrar todas las visualizaciones interactivas en un entorno accesible desde cualquier dispositivo, asegurando un despliegue completo y funcional del proyecto.
+
+
+
+## **Metodología**
+
+Utilizaremos la metodología de desarrollo CRISP-DM (Cross Industry Standard Process for Data Mining) que es un marco ampliamente utilizado para proyectos de Ciencias de Datos. En la siguiente figura se presenta un diagrama con las diferentes fases de esta metodología que a continuación describimos con más detalle:
+
+<center>
+
+<img src="https://ctim.es/AEDV/1200px-CRISP-DM_Process_Diagram1.5x.png" width="40%"/>
+
+<p style="font-size: 14px; color: gray;">
+
+<em>Diagrama metodología de desarrollo CRISP-DM</em>
+
+</p>
+
+</center>
+
+-   **Comprensión del negocio**. Se plantean los objetivos del proyecto y la búsqueda de información y datos.
+
+<!-- Una parte de esta fase incluye la descripción del objeto del proyecto y sus objetivos, como eso ya se ha presentado anteriormente en la memoria no se repite aquí. Otra parte que si se incluye es describir lo que se ha hecho para  la búsqueda de datos, las fuentes consultadas, entrevistas, lecturas bibliográficas, etc.. señalando las incidencias/dificultades encontradas, así como el análisis de la fiabilidad de la información obtenida. En esta fase no se realiza una descripción detallada de los datos ni pondremos gráficas.  -->
+
+-   **Comprensión de los datos**. Se analiza la estructura y organización de los datos obtenidos. Se identifican posible problemas como datos faltantes, outliers o inconsistencias.
+
+```{=html}
+<!-- Identificar y describir con claridad el significado de las variables categóricas existentes (y todos los valores que pueden tomar) y las observaciones (habitualmente valores numéricos). Identificar si los datos están organizados de forma ordenada (tidy), es decir una sola observación por cada fila de la tabla acompañada de variables categóricas o de forma no ordenada, es decir, varias observaciones por cada fila. En este caso,  habitualmente, los valores posibles de una variable categórica se distribuyen como títulos de columnas de la tabla y cada celda de esas columnas incluye una observación. Estudiar la frecuencia (Nº de observaciones) asociadas a las variables categóricas, el tamaño e intervalo temporal de las series temporales (si procede), la distribución del nº de observaciones por regiones, o por otro tipo de desglose de la información (si procede), análisis de los atributos combinados existentes, dados por las combinaciones de variables categóricas que aparecen en el dataset. Analizar en más detalle (si hubiera lugar) como son los datos en la regiones que más me interesan. Identificación de errores, valores ausentes, outliers o cualquier otra incosistencia encontrada. 
+
+En esta fase no se realiza procesado de datos salvo el mínimo para obtener la información que se requiere. Tampoco se entra a valorar la calidad de los datos o como habría que procesarlos. En términos médicos, esta sería la fase del diagnóstico donde todavía no se comenta nada del pronóstico del paciente o del tratamiento. Por tanto no se expresan opiniones sobre los datos, solo se exponen tal cual son. 
+
+En esta fase, en general, no pondremos gráficos, salvo cosas muy sencillas relativas a las frecuencias de los datos y cosas de ese tipo, pues los gráficos requieren, en general, selección y procesamiento de datos previo. 
+
+El análisis de lo datos realizado para la validación del tema del proyecto personal va en este apartado. 
+
+-->
+```
+
+-   **Preparación de los datos**. Se realiza limpieza, transformación, combinación y selección/creación de variables relevantes para el análisis
+
+<!-- En esta fase, a partir de los resultados de la fase anterior, estudiamos la relevancia y calidad de la información obtenida en la fase anterior de acuerdo con los objetivos del proyecto, si procede seleccionamos/eliminamos variables categóricas o algunas de sus opciones, exponiendo con claridad y justificadamente los atributos combinados (formados por combinaciones de variables categóricas) que vamos a usar en el estudio. Decidimos el intervalo temporal que vamos a usar para  nuestro estudio. Realizamos la limpieza, transformación,  creación de nuevas variables, combinación de tablas,etc... En esta fase pondremos las gráficas que ilustran los datos una vez procesados y seleccionados pero sin usar los modelos que se formulan en la siguiente fase.  -->
+
+-   **Modelado**. Selección y aplicación de los modelos adecuados para analizar los datos
+
+<!-- Se aplican a los datos los modelos utilizados, como por ejemplo, regresión lineal, modelos ARIMA, matriz de correlación, PCA, etc.. En esta fase se pondrán gráficas sobre el uso de de estos modelos.  -->
+
+-   **Evaluación**. Evaluar si el modelo responde a las preguntas de investigación, comparación con otros métodos
+
+<!-- Se discuten de forma crítica los resultados obtenidos incluyendo pruebas de evaluación / validación realizadas (si procede) -->
+
+-   **Despliegue**. Comunicación del trabajo en una memoria y diseño y elaboración de un cuadro de mandos para presentar los resultados de forma eficaz y atractiva.
+
+<!-- El despliegue de este proyecto se realizará a través de la confección de esta memoria y de un cuadro de mandos. -->
+
+<!-- De acuerdo con esta metodología, los resultados se van presentando, discutiendo y validando a lo largo de las fases de **Modelado**, **Evaluación** y **Despliegue** y, por tanto, para mantener una estructura coherente de la memoria, de acuerdo con la aplicación de la  metodología CRISP-DM, no existe en la memoria una sección separada de presentación de resultados.  -->
+
+Es importante observar que esta metodología es iterativa, es decir que los resultados obtenidos en algunas de las fases puede afectar al desarrollo de fases anteriores.
+
+A continuación se describirá en detalle como se han abordado cada una de las fases del desarrollo del proyecto siguiendo esta metodología.
+
+## **Comprensión del negocio**
+
+El proyecto aborda el análisis de la evolución demográfica en Europa, prestando especial atención al desequilibrio creciente entre población joven y población envejecida. Este fenómeno, representado frecuentemente mediante metáforas visuales como la **balanza demográfica**, donde un número reducido de jóvenes debe sostener el peso social y económico de un grupo cada vez mayor de personas mayores, constituye un reto central para las políticas públicas, el mercado laboral y la sostenibilidad de los sistemas de bienestar.
+
+Para ello se llevó a cabo un proceso sistemático de búsqueda de información. Las principales fuentes consultadas fueron:
+
+- **Eurostat**, mediante el dataset *proj_23ndbi* y el dataset histórico *demo_pjan*.
+- **Documentación GISCO** para obtener contornos NUTS.
+
+La información seleccionada cumple criterios de fiabilidad y consistencia, permitiendo avanzar a la preparación de datos.
+
+### Dataset a elegir
+
+```{r}
+# CÓDIGO DATASET
+dataset.name <- "proj_23ndbi"
+```
+
+```{r}
+datasets <- read.xlsx("https://ctim.ulpgc.es/AEDV/data/Eurostat.datasets.xlsx") %>%
+  as_tibble()  %>%
+  filter(code==dataset.name)
+```
+
+-   **code**: `r datasets$code[1]`
+-   **title**: `r datasets$title[1]`
+-   **last.update.of.data**: `r datasets$last.update.of.data[1]` <!-- * **last.table.structure.change**: `r datasets$last.table.structure.change[1]` -->
+-   **data.start**: `r datasets$data.start[1]`
+-   **data.end**: `r datasets$data.end[1]`
+-   **values**: `r format(datasets$values[1],big.mark = ".")`
+
+### Resumen y utilidad del dataset
+
+-   **Resumen**: Contiene proyecciones demográficas de Eurostat a nivel nacional (países de la UE y de la EFTA), desglosadas por tipo de indicador demográfico (**indic_de**) y escenario de proyección (**projection**). Incluye nacimientos, defunciones, migraciones y población proyectada en diferentes supuestos (fertilidad, mortalidad, migración), con datos anuales desde 2022 hasta 2100. Forma parte de la serie EUROPOP2023, que proporciona escenarios de referencia y de sensibilidad sobre la evolución de la población europea a largo plazo.
+
+-   **Utilidad**: Permite estudiar la evolución futura de la población bajo diferentes supuestos, comparar escenarios (alta/baja migración, fertilidad, esperanza de vida), y analizar tendencias demográficas clave (envejecimiento, sostenibilidad de la población activa, dinámica natural y migratoria). Es fundamental para planificar políticas públicas a largo plazo en ámbitos como pensiones, salud, educación y mercado laboral, así como para investigaciones académicas sobre cambios demográficos y socioeconómicos.
+
+
+### Descarga de dataset
+
+```{r}
+# cargamos la tabla y la ordenamos por fechas y países 
+data <- get_eurostat(dataset.name, time_format = "date") %>%
+  as_tibble() %>%
+  arrange(TIME_PERIOD,geo)
+```
+
+```{r}
+str(data)
+```
+
+-   **freq**: frecuencia temporal de los datos. En este dataset solo aparece **"A"**, que corresponde a observaciones anuales (1 de enero).
+
+-   **indic_de**: tipo de indicador demográfico incluido en las proyecciones de población EUROPOP2023. Cada código representa una medida específica relacionada con natalidad,mortalidad, migración o estructura por edad:
+
+    \-**DEATH**: número proyectado de defunciones.\
+    -**DEPRATIO1**: tasa de dependencia total (población 0-19 años y 65+ respecto a 20-64 años).\
+    -**DEPRATIO3**: tasa de dependencia total alternativa (población 0-14 y 65+ respecto a 15-64 años).\
+    -**FMEDAGEPOP**: edad media de la población femenina.\
+    -**JAN**: población residente el 1 de enero (valor total proyectado).\
+    -**LBIRTH**: número proyectado de nacimientos vivos.\
+    -**MEDAGEPOP**: edad media total de la población (ambos sexos).\
+    -**MMEDAGEPOP**: edad media de la población masculina.\
+    -**NMIGRAT**: migración neta (inmigrantes menos emigrantes).\
+    -**OLDDEP1**: tasa de dependencia de mayores (65+ respecto a 20-64 años).\
+    -**OLDDEP3**: tasa de dependencia de mayores alternativa (65+ respecto a 15-64 años).\
+    -**PC_Y0_14**: porcentaje de población de 0 a 14 años sobre el total.\
+    -**PC_Y0_19**: porcentaje de población de 0 a 19 años sobre el total.\
+    -**PC_Y15_64**: porcentaje de población de 15 a 64 años sobre el total.\
+    -**PC_Y15_74**: porcentaje de población de 15 a 74 años sobre el total.\
+    -**PC_Y20_64**: porcentaje de población de 20 a 64 años sobre el total.\
+    -**PC_Y65_MAX**: porcentaje de población de 65 años o más sobre el total.\
+    -**PC_Y80_MAX**: porcentaje de población de 80 años o más sobre el total.\
+    -**YOUNGDEP1**: tasa de dependencia juvenil (0-19 respecto a 20-64 años).\
+    -**YOUNGDEP3**: tasa de dependencia juvenil alternativa (0-14 respecto a 15-64 años).
+
+-   **projection**: escenario de proyección demográfica considerado. Ejemplos:
+
+    -   **BSL**: escenario base (baseline)\
+    -   **HMIGR**: alta migración\
+    -   **LMIGR**: baja migración\
+    -   **LFRT**: baja fertilidad\
+    -   **HFRT**: alta fertilidad\
+    -   **HLE**: alta esperanza de vida\
+    -   **LLE**: baja esperanza de vida
+
+-   **geo**: territorios para los que existen proyecciones. Incluye países de la UE y de la EFTA (**NUTS0**).
+
+-   **TIME_PERIOD**: fecha de referencia (1 de enero del año). Cubre el intervalo 2022–2100, con periodicidad anual.
+
+-   **values**: valor numérico de la proyección, en número absoluto de personas (unidad **NR**).
+
+```{r}
+# CÓDIGOS NUTS DE REGIONES REALES PRESENTES EN LOS MAPAS NUTS ACTUALES
+
+NUTS0_codes <- c("EL", "ES", "FI", "FR", "HR", "HU", "IE", "IS", "AL", "AT", "BA", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "IT", "LI", "LT", "LU", "LV", "ME", "MK", "MT", "NL", "NO", "PL", "PT", "RO", "RS", "SE", "SI", "SK", "TR", "UA", "XK")
+
+NUTS1_codes <- c("DEA", "DEB", "DEC", "DED", "DEE", "DEF", "DEG", "DK0", "EE0", "EL3", "EL4", "EL5", "EL6", "ES1", "ES2", "ES3", "ES4", "ES5", "ES6", "ES7", "FI1", "AL0", "AT1", "AT2", "AT3", "BA0", "BE1", "BE2", "BE3", "BG3", "BG4", "CH0", "CY0", "CZ0", "DE1", "DE2", "DE3", "DE4", "DE5", "DE6", "DE7", "DE8", "DE9", "HR0", "HU1", "HU2", "HU3", "IE0", "IS0", "ITC", "ITF", "ITG", "ITH", "ITI", "LI0", "XK0", "LT0", "LU0", "LV0", "ME0", "MK0", "MT0", "NL1", "NL2", "NL3", "NL4", "NO0", "PL2", "PL4", "PL5", "PL6", "PL7", "PL8", "PL9", "PT1", "PT2", "PT3", "RO1", "RO2", "RO3", "RO4", "RS1", "RS2", "SE1", "SE2", "SE3", "SI0", "SK0", "TR1", "TR2", "TR3", "TR4", "TR5", "TR6", "TR7", "TR8", "TR9", "TRA", "TRB", "TRC", "FI2", "FR1", "FRB", "FRC", "FRD", "FRE", "FRF", "FRG", "FRH", "FRI", "FRJ", "FRK", "FRL", "FRM", "FRY")
+
+NUTS2_codes <- c("DE12", "DE13", "DE14", "DE21", "DE22", "DE23", "DE24", "DE25", "DE26", "DE27", "DE30", "DE40", "DE50", "DE60", "DE71", "DE72", "DE73", "DE80", "DE91", "DE92", "DE93", "DE94", "DEA1", "DEA2", "DEA3", "DEA4", "DEA5", "DEB1", "DEB2", "DEB3", "DEC0", "DED2", "DED4", "DED5", "DEE0", "DEF0", "DEG0", "DK01", "AL01", "AL02", "AL03", "AT11", "AT12", "AT13", "AT21", "AT22", "AT31", "AT32", "AT33", "AT34", "BA01", "BA02", "BA03", "BE10", "BE21","BE22", "BE23", "BE24", "BE25", "BE31", "BE32", "BE33", "BE34", "BE35", "BG31", "BG32", "BG33", "BG34", "BG41", "BG42", "CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH07", "CY00", "CZ01", "CZ02", "CZ03", "CZ04", "CZ05", "CZ06", "CZ07", "CZ08", "DE11", "MK00", "MT00", "NL11", "NL12", "NL13", "NL21", "NL22", "NL23", "NL32", "NL34", "NL35", "NL36", "NL41", "NL42", "NO02", "NO06", "NO07", "NO08", "NO09", "NO0A", "NO0B", "PL21", "PL22", "PL41", "PL42", "PL43", "PL51", "PL52", "PL61", "PL62", "PL63", "PL71", "PL72", "PL81", "PL82", "PL84", "PL91", "PL92", "PT11", "PT15", "PT19", "PT1A", "PT1B", "PT1C", "DK02", "DK03", "DK04", "DK05", "EE00", "EL30", "EL41", "EL42", "EL43", "EL51", "EL52", "EL53", "EL54", "EL61", "EL62", "EL63", "EL64", "EL65", "ES11", "ES12", "ES13", "ES21", "ES22", "ES23", "ES24", "ES30", "ES41", "ES42", "ES43", "ES51", "ES52", "ES53", "ES61", "ES62", "ES63", "ES64", "ES70", "FI19", "FI1B", "FI1C", "FI1D", "FI20", "FR10", "FRB0", "FRC1", "FRC2", "FRD1", "FRD2", "FRE1", "FRE2", "FRF1", "FRF2", "FRF3", "FRG0", "FRH0", "FRI1", "FRI2", "FRI3", "FRJ1", "FRJ2", "FRK1", "FRK2", "FRL0", "FRM0", "FRY1", "FRY2", "FRY3", "FRY4", "FRY5", "HR02", "HR03", "HR05", "HR06", "HU11", "HU12", "HU21", "HU22", "HU23", "HU31", "HU32", "HU33", "IE04", "IE05", "IE06", "IS00", "ITC1", "ITC2", "ITC3", "ITC4", "ITF1", "ITF2", "ITF3", "ITF4", "ITF5", "ITF6", "ITG1", "ITG2", "ITH1", "ITH2", "ITH3", "ITH4", "ITH5", "ITI1", "ITI2", "ITI3", "ITI4", "LI00", "LT01", "LT02", "LU00", "LV00", "ME00", "SE33", "SI03", "SI04", "SK01", "SK02", "SK03", "SK04", "TR10", "TR21", "TR22", "TR31", "TR32", "TR33", "TR41", "TR42", "TR51", "TR52", "TR61", "TR62", "TR63", "TR71", "TR72", "TR81", "TR82", "TR83", "TR90", "TRA1", "TRA2", "TRB1", "TRB2", "TRC1", "TRC2", "TRC3", "XK00", "PT1D", "PT20", "PT30", "RO11", "RO12", "RO21", "RO22", "RO31", "RO32", "RO41", "RO42", "RS11", "RS12", "RS21", "RS22", "SE11", "SE12", "SE21", "SE22", "SE23", "SE31", "SE32")
+
+NUTS3_codes <- c("AT333", "AT334", "AT335", "AT341", "AT342", "BE100", "BE211", "BE212", "BE213", "BE223", "BE224", "BE225", "BE231", "BE232", "BE233", "BE234", "BE235", "BE236", "BE241", "BE242", "BE251", "BE252", "BE253", "BE254", "BE255", "BE256", "BE257", "BE258", "BE310", "BE323", "BE328","BE329", "BE32A", "BE32B", "BE32C", "BE32D", "BE331", "BE332", "BE334", "BE335", "BE336", "BE341", "BE342", "BE343", "BE344", "BE345", "BE351", "BE352", "BE353", "BG311", "BG312", "BG313", "BG314", "BG315", "BG321", "BG322", "BG323", "BG324", "BG325", "BG331", "BG332", "BG333", "BG334", "BG341", "BG342", "BG343", "BG344", "BG411", "BG412", "BG413", "BG414", "BG415", "BG421", "BG422", "BG423", "BG424", "BG425", "CH011", "CH012", "CH013", "CH021", "CH022", "CH023", "CH024", "CH025", "CH031", "CH032", "CH033", "CH040", "CH051", "CH052", "CH053", "CH054", "CH055", "CH056", "CH057", "CH061", "CH062", "CH063", "CH064", "CH065", "CH066", "CH070", "CY000", "CZ010", "CZ020", "CZ031", "CZ032", "CZ041", "CZ042", "CZ051", "CZ052", "CZ053", "CZ063", "CZ064", "CZ071", "CZ072", "CZ080", "DE111", "DE112", "DE113", "DE114", "DE115", "DE116", "DE117", "DE118", "DE119", "DE11A", "DE11B", "DE11C", "DE11D", "DE121", "DE122", "DE123", "DE124", "DE125", "DE126", "DE127", "DE128", "DE129", "DE12A", "DE12B", "DE12C", "DE131", "DE132", "DE133", "DE134", "DE135", "DE136", "DE137", "DE138", "DE139", "DE13A", "DE141", "DE142", "DE143", "DE144", "DE145", "DE146", "DE147", "DE148", "DE149", "DE211", "DE212", "AL011", "AL012", "AL013", "AL014", "AL015", "AL021", "AL022", "AL031", "AL032", "AL033", "AL034", "AL035", "AT111", "AT112", "AT113", "AT121", "AT122", "AT123", "AT124", "AT125", "AT126", "AT127", "AT130", "AT211", "AT212", "AT213", "AT221", "AT222", "AT223", "AT224", "AT225", "AT226", "AT311", "AT312", "AT313", "AT314", "AT315", "AT321", "AT322", "AT323", "AT331", "AT332", "DE238", "DE239")
+
+NUTS3_codes <-c(NUTS3_codes, "DE23A", "DE241", "DE242", "DE243", "DE244", "DE245", "DE246", "DE247", "DE248", "DE249", "DE24A", "DE24B", "DE24C", "DE24D", "DE251", "DE252", "DE253", "DE254", "DE255", "DE256", "DE257", "DE258", "DE259", "DE25A", "DE25B", "DE25C", "DE261", "DE262", "DE263", "DE264", "DE265", "DE266", "DE267", "DE268", "DE269", "DE26A", "DE26B", "DEA5C", "DEB11", "DEB12", "DEB13", "DEB14", "DEB15", "DEB17", "DEB18", "DEB1A", "DEB1B", "DEB1C", "DEB1D", "DEB21", "DEB22", "DEB23", "DEB24", "DEB25", "DEB31", "DEB32", "DEB33", "DEB34", "DEB35", "DEB36", "DEB37", "DEB38", "DEB39", "DEB3A", "DEB3B", "DEB3C", "DEB3D", "DEB3E", "DEB3F", "DEB3G", "DEB3H", "DEB3I", "DEB3J", "DEB3K", "DEC01", "DEC02", "DEC03", "DEC04", "DEC05", "DEC06", "DED21", "DED2C", "DED2D", "DED2E", "DED2F", "DED41", "DED42", "DED43", "DED44", "DED45", "DED51", "DED52", "DED53", "DEE01", "DEE02", "DEE03", "DEE04", "DEE05", "DEE06", "DEE07", "DEE08", "DEE09", "DEE0A", "DEE0B", "DEE0C", "DEE0D", "DEE0E", "DEF01", "DEF02", "DEF03", "DEF04", "DEF05", "DEF06", "DEF07", "DEF08", "DEF09", "DEF0A", "DEF0B", "DEF0C", "DEF0D", "DEF0E", "DEF0F", "DEG01", "DEG02", "DE26C", "DE271", "DE272", "DE273", "DE274", "DE275", "DE276", "DE277", "DE278", "DE279", "DE27A", "DE27B", "DE27C", "DE27D", "DE27E", "DE300", "DE401", "DE402", "DE403", "DE404", "DE405", "DE406", "DE407", "DE408", "DE409", "DE40A", "DE40B", "DE40C", "DE40D", "DE40E", "DE40F", "DE40G", "DE40H", "DE40I", "DE501", "DE502", "DE600", "DE711", "DE712", "DE713", "DE714", "DE715", "DE716", "DE717", "DE718", "DE719", "DE71A", "DE71B", "DE71C", "DE71D", "DE71E", "DE721", "DE722", "DE723", "DE724", "DE725", "DE731", "DE732", "DE733", "DE734", "DE735", "DE736", "DE737", "DE803", "DE804", "DE80J", "DE80K", "DE80L", "DE80M", "DE80N", "DE80O", "DE911", "DE912", "DE913", "DE914", "DE916", "DE917", "DE918", "DE91A", "DE91B", "DE91C", "DE922", "DE923", "DE925", "DE926", "DE927", "DE928", "DE929", "DE931", "DE932", "DE933", "DE934", "DE935", "DE936", "DE937", "DE938", "DE939", "DE93A", "DE93B", "DE941", "DE942", "DE943", "DE944", "DE945", "DE946", "DE947", "DE948", "DE949", "DE94A", "DE94B", "DE94C", "DE94D")
+
+NUTS3_codes <-c(NUTS3_codes, "DE94E", "DE94F", "DE94G", "DE94H", "DEA11", "DEA12", "DEA13", "DEA14", "DEA15", "DEA16", "DEA17", "DEA18", "DEA19", "DEA1A", "DEA1B", "DEA1C", "DEA1D", "DEA1E", "DEA1F", "DEA22", "DEA23", "DEA24", "DEA26", "DEA27", "DEA28", "DEA29", "DEA2A", "DEA2B", "DEA2C", "DEA2D", "DEA31", "DEA32", "DEA33", "DEA34", "DEA35", "DEA36", "DEA37", "DEA38", "DEA41", "DEA42", "DEA43", "DEA44", "DEA45", "DEA46", "DEA47", "DEA51", "DEA52", "DEA53", "DEA54", "DEA55", "DEA56", "DEA57", "DEA58", "DEA59", "DEA5A", "DEA5B", "DE213", "DE214", "DE215", "DE216", "DE217", "DE218", "DE219", "DE21A", "DE21B", "DE21C", "DE21D", "DE21E", "DE21F", "DE21G", "DE21H", "DE21I", "DE21J", "DE21K", "DE21L", "DE21M", "DE21N", "DE221", "DE222", "DE223", "DE224", "DE225", "DE226", "DE227", "DE228", "DE229", "DE22A", "DE22B", "DE22C", "DE231", "DE232", "DE233", "DE234", "DE235", "DE236", "DE237", "FRD11", "FRD12", "FRD13", "FRD21", "FRD22", "FRE11", "FRE12", "FRE21", "FRE22", "FRE23", "FRF11", "FRF12", "FRF21", "FRF22", "FRF23", "FRF24", "FRF31", "FRF32", "FRF33", "FRF34", "FRG01", "FRG02", "FRG03", "FRG04", "FRG05", "FRH01", "FRH02", "FRH03", "FRH04", "FRI11", "FRI12", "FRI13", "FRI14", "FRI15", "FRI21", "FRI22", "FRI23", "FRI31", "FRI32", "FRI33", "FRI34", "FRJ11", "FRJ12", "FRJ13", "FRJ14", "FRJ15", "FRJ21", "FRJ22", "FRJ23", "FRJ24", "FRJ25", "FRJ26", "FRJ27", "FRJ28", "FRK11", "FRK12", "FRK13", "FRK14", "FRK21", "FRK22", "FRK23", "FRK24", "FRK25", "FRK26", "FRK27", "FRK28", "FRL01", "FRL02", "FRL03", "FRL04", "FRL05", "FRL06", "FRM01", "FRM02", "FRY10", "FRY20", "DEG03", "DEG05", "DEG06", "DEG07", "DEG09", "DEG0A", "DEG0C", "DEG0D", "DEG0E", "DEG0G", "DEG0J", "DEG0K", "DEG0L", "DEG0M", "DEG0Q", "DEG0R", "DEG0S", "DEG0T", "DEG0U", "DEG0V", "DK011", "DK012", "DK013", "DK014", "DK021", "DK022", "DK031", "DK032", "DK041", "DK042", "DK050", "EE001", "EE004", "EE008", "EE009", "EE00A", "EL301", "EL302", "EL303", "EL304", "EL305", "EL306", "EL307", "EL411", "EL412", "EL413", "EL421", "EL422", "EL431", "EL432", "EL433", "EL434", "EL511", "EL512", "EL513", "EL514", "EL515", "EL521", "EL522", "EL523", "EL524", "EL525", "EL526", "EL527")
+
+NUTS3_codes <-c(NUTS3_codes, "EL531", "EL532", "EL533", "EL541", "EL542", "EL543", "EL611", "EL612", "EL613", "EL621", "EL622", "EL623", "EL624", "EL631", "EL632", "EL633", "EL641", "EL642", "EL643", "EL644", "EL645", "EL651", "EL652", "EL653", "ES111", "ES112", "ES113", "ES114", "ES120", "ES130", "ES211", "ES212", "ES213", "ES220", "ES230", "ES241", "ES242", "ES243", "ES300", "ES411", "ES412", "ES413", "ES414", "ES415", "ES416", "ES417", "ES418", "ES419", "ES421", "ES422", "ES423", "ES424", "ES425", "ES431", "ES432", "ES511", "ES512", "ES513", "ES514", "ES521", "ES522", "ES523", "ES531", "ES532", "ES533", "ES611", "ES612", "ES613", "ES614", "ES615", "ES616", "ES617", "ES618", "ES620", "ES630", "ES640", "ES703", "ES704", "ES705", "ES706", "ES707", "ES708", "ES709", "FI196", "FI198", "FI199", "FI19A", "FI19B", "FI1B1", "FI1C1", "FI1C2", "FI1C5", "FI1C6", "FI1C7", "FI1D5", "FI1D7", "FI1D8", "FI1D9", "FI1DA", "FI1DB", "FI1DC", "FI200", "FR101", "FR102", "FR103", "FR104", "FR105", "FR106", "FR107", "FR108", "FRB01", "FRB02", "FRB03", "FRB04", "FRB05", "FRB06", "FRC11", "FRC12", "FRC13", "FRC14", "FRC21", "FRC22", "FRC23", "FRC24", "HU313", "HU321", "HU322", "HU323", "HU331", "HU332", "HU333", "IE041", "IE042", "IE051", "IE052", "IE053", "IE061", "IE062", "IE063", "IS001", "IS002", "ITC11", "ITC12", "ITC13", "ITC14", "ITC15", "ITC16", "ITC17", "ITC18", "ITC20", "ITC31", "ITC32", "ITC33", "ITC34", "ITC41", "ITC42", "ITC43", "ITC44", "ITC46", "ITC47", "ITC48", "ITC49", "NL415", "NL416", "NL421", "NL422", "NL423", "NO020", "NO060", "NO071", "NO072", "NO073", "NO081", "NO083", "NO084", "NO085", "NO092", "NO093", "NO094", "NO0A1", "NO0A2", "NO0A3", "NO0B1", "NO0B2", "PL213", "PL214", "PL217", "PL218", "PL219", "PL21A", "PL224", "PL225", "PL227", "PL228", "PL229", "PL22A", "PL22B", "PL22C", "PL411", "PL414", "PL415", "PL416", "PL417", "PL418", "PL424", "PL426", "PL427", "PL428", "PL431", "PL432", "PL514", "PL515", "PL516", "PL517", "PL518", "PL523", "PL524", "PL613", "PL616", "PL617", "PL618", "PL619", "PL621", "PL622", "PL623", "PL633", "PL634", "PL636", "PL637", "PL638", "PL711", "PL712", "ITC4A", "ITC4B", "ITC4C", "ITC4D")
+
+NUTS3_codes <-c(NUTS3_codes, "ITF11", "ITF12", "ITF13", "ITF14", "ITF21", "ITF22", "ITF31", "ITF32", "ITF33", "ITF34", "ITF35", "ITF43", "ITF44", "ITF45", "ITF46", "ITF47", "ITF48", "ITF51", "ITF52", "ITF61", "ITF62", "ITF63", "ITF64", "ITF65", "ITG11", "ITG12", "ITG13", "ITG14", "ITG15", "ITG16", "ITG17", "ITG18", "ITG19", "ITG2D", "ITG2E", "ITG2F", "ITG2G", "ITG2H", "ITH10", "ITH20", "ITH31", "ITH32", "ITH33", "ITH34", "ITH35", "ITH36", "ITH37", "ITH41", "ITH42", "ITH43", "ITH44", "ITH51", "ITH52", "ITH53", "ITH54", "ITH55", "ITH56", "ITH57", "ITH58", "ITH59", "ITI11", "ITI12", "ITI13", "ITI14", "ITI15", "ITI16", "ITI17", "ITI18", "ITI19", "ITI1A", "ITI21", "ITI22", "ITI31", "ITI32", "ITI33", "ITI34", "ITI35", "ITI41", "ITI42", "ITI43", "ITI44", "ITI45", "LI000", "LT011", "LT021", "LT022", "LT023", "LT024", "LT025", "LT026", "LT027", "LT028", "LT029", "LU000", "LV005", "LV009", "LV00A", "LV00B", "LV00C", "ME000", "MK001", "MK002", "MK003", "MK004", "MK005", "MK006", "MK007", "MK008", "MT001", "MT002", "NL112", "NL114", "NL115", "NL126", "NL127", "NL128", "NL131", "NL132", "NL133", "NL211", "NL212", "NL213", "NL221", "NL224", "NL225", "NL226", "NL230", "NL321", "NL323", "NL325", "NL327", "NL328", "NL32A", "NL32B", "NL341", "NL342", "NL350", "NL361", "NL362", "NL363", "NL364", "NL365", "NL366", "NL411", "NL414", "FRY30", "FRY40", "FRY50", "HR021", "HR022", "HR023", "HR024", "HR025", "HR026", "HR027", "HR028", "HR031", "HR032", "HR033", "HR034", "HR035", "HR036", "HR037", "HR050", "HR061", "HR062", "HR063", "HR064", "HR065", "HU110", "HU120", "HU211", "HU212", "HU213", "HU221", "HU222", "HU223", "HU231", "HU232", "HU233", "HU311", "HU312", "TR412", "TR413", "TR421", "TR422", "TR423", "TR424", "TR425", "TR510", "TR521", "TR522", "TR611", "TR612", "TR613", "TR621", "TR622", "TR631", "TR632", "TR633", "TR711", "TR712", "TR713", "TR714", "TR715", "TR721")
+
+NUTS3_codes <-c(NUTS3_codes, "TR722", "TR723", "TR811", "TR812", "TR813", "TR821", "TR822", "TR823", "TR831", "TR832", "TR833", "TR834", "TR901", "TR902", "TR903", "TR904", "TR905", "TR906", "TRA11", "TRA12", "TRA13", "TRA21", "TRA22", "TRA23", "TRA24", "TRB11", "TRB12", "TRB13", "TRB14", "TRB21", "TRB22", "TRB23", "TRB24", "TRC11", "TRC12", "TRC13", "TRC21", "TRC22", "TRC31", "TRC32", "TRC33", "TRC34", "PL713", "PL714", "PL715", "PL721", "PL722", "PL811", "PL812", "PL814", "PL815", "PL821", "PL822", "PL823", "PL824", "PL841", "PL842", "PL843", "PL911", "PL912", "PL913", "PL921", "PL922", "PL923", "PL924", "PL925", "PL926", "PT111", "PT112", "PT119", "PT11A", "PT11B", "PT11C", "PT11D", "PT11E", "PT150", "PT191", "PT192", "PT193", "PT194", "PT195", "PT196", "PT1A0", "PT1B0", "PT1C1", "PT1C2", "PT1C3", "PT1C4", "PT1D1", "PT1D2", "PT1D3", "PT200", "PT300", "RO111", "RO112", "RO113", "RO114", "RO115", "RO116", "RO121", "RO122", "RO123", "RO124", "RO125", "RO126", "RO211", "RO212", "RO213", "RO214", "RO215", "RO216", "RO221", "RO222", "RO223", "RO224", "RO225", "RO226", "RO311", "RO312", "RO313", "RO314", "RO315", "RO316", "RO317", "RO321", "RO322", "RO411", "RO412", "RO413", "RO414", "RO415", "RO421", "RO422", "RO423", "RO424", "RS110", "RS121", "RS122", "RS123", "RS124", "RS125", "RS126", "RS127", "RS211", "RS212", "RS213", "RS214", "RS215", "RS216", "RS217", "RS218", "RS221", "RS222", "RS223", "RS224", "RS225", "RS226", "RS227", "RS228", "RS229", "SE110", "SE121", "SE122", "SE123", "SE124", "SE125", "SE211", "SE212", "SE213", "SE214", "SE221", "SE224", "SE231", "SE232", "SE311", "SE312", "SE313", "SE321", "SE322", "SE331", "SE332", "SI031", "SI032", "SI033", "SI034", "SI035", "SI036", "SI037", "SI038", "SI041", "SI042", "SI043", "SI044", "SK010", "SK021", "SK022", "SK023", "SK031", "SK032", "SK041", "SK042", "TR100", "TR211", "TR212", "TR213", "TR221", "TR222", "TR310", "TR321", "TR322", "TR323", "TR331", "TR332", "TR333", "TR334", "TR411", "XK001", "XK002", "XK003", "XK004", "XK005", "XK006", "XK007")
+
+NUTS.computation <- function(s){
+  if(substr(s,1,2) %in% c("EU","EA","EF","CC","OE","G2","G7"))  return(s)
+  if(nchar(s)==2 & s %in% NUTS0_codes) return("0")
+  if(nchar(s)==3 & s %in% NUTS1_codes) return("1")
+  if(nchar(s)==4 & s %in% NUTS2_codes) return("2")
+  if(nchar(s)==5 & s %in% NUTS3_codes) return("3")
+  return("OTHERS")
+}
+```
+
+```{r}
+for(col in colnames(data)){
+  if(is.numeric(data[[col]])) next
+  if(col=="TIME_PERIOD"){
+    # print(col)
+    # print(
+    #   paste0("data.start: ",min(data[[col]]),
+    #          ", data.end: ",max(data[[col]]),
+    #          ", Number of time periods: ",length(unique(data[[col]]))
+    #   )
+    # )
+    
+    cat("\nCOLUMNA: TIME_PERIOD \n")
+    print(
+      data %>%
+        group_by(TIME_PERIOD) %>%
+        summarise(N.observ=dplyr::n())%>%
+        as.matrix() %>%
+        noquote()
+    )
+    next
+  }
+ if(col=="geo"){
+    cat("\nCONTABILIZACIÓN Nº REGIONES NUTS A PARTIR DE LA COLUMNA geo\n")
+    print(
+      tibble(
+        NUTS=sapply(unique(data[[col]]),NUTS.computation)
+      ) %>%
+        group_by(NUTS) %>%
+        summarise(`Number of Regions`=dplyr::n()) %>%
+        as.matrix() %>%
+        noquote()
+    )
+    next
+ }
+  tb <-  data %>%
+    left_join(get_eurostat_dic(col)%>%rename(!!col := code_name),
+              by=col) %>%
+    group_by(!!sym(col),full_name)%>%
+    summarise(N.Observ=dplyr::n()) %>%
+    relocate(N.Observ,.before = full_name)%>%
+    arrange(desc(N.Observ)) %>%
+    mutate(full_name=ifelse(nchar(full_name)<41,full_name,paste0(substr(full_name,1,40),"..")))
+    
+  texto <- paste0("COLUMNA: ",col)
+  if(nrow(tb)>50){
+    texto <- paste0(texto," (",nrow(tb)," opciones, se imprimen 50)")
+    tb <- head(tb,50)
+  }
+  cat(texto,"\n")
+  
+  tb %>% 
+    as.matrix() %>%
+    noquote() %>%
+    print()
+}
+
+
+tb
+```
+
+Al ser una dataset de predicciones el volumen de datos es igual para cada variable y sus posibles valores (N.obs = 3840)
+
+### Percentiles de la distribución de tamaños de las series temporales
+
+Observamos que el máximo tamaño de las series temporales es 79 y además todos tienen el mismo tamaño.
+
+```{r}
+vars <- colnames(data)[1:(ncol(data)-2)]
+
+data.series <- data %>%
+  group_by(across(all_of(vars))) 
+
+data.series.fechas <- data.series %>% 
+  summarise(N.fechas=dplyr::n())
+```
+
+```{r}
+percentiles <- tibble(min=min(data.series.fechas$N.fechas))
+percentiles <- percentiles %>% mutate(min=min(data.series.fechas$N.fechas))
+percentiles <- percentiles %>% mutate(p10=quantile(data.series.fechas$N.fechas, 0.1))
+percentiles <- percentiles %>% mutate(p25=quantile(data.series.fechas$N.fechas, 0.25))
+percentiles <- percentiles %>% mutate(p50=quantile(data.series.fechas$N.fechas, 0.50))
+percentiles <- percentiles %>% mutate(p75=quantile(data.series.fechas$N.fechas, 0.75))
+percentiles <- percentiles %>% mutate(p90=quantile(data.series.fechas$N.fechas, 0.9))
+percentiles <- percentiles %>% mutate(max=max(data.series.fechas$N.fechas))
+
+percentiles
+```
+
+### Distribución del nº de observaciones por regiones
+
+Observamos que, para España, el nº de observaciones supera el `p75` de la distribución.
+
+```{r}
+data.geo <- data %>%
+  group_by(geo)%>%
+  summarise(N.Observ=dplyr::n())
+```
+
+**Percentiles de la distribución del nº de observaciones por regiones**
+
+```{r}
+percentiles <- tibble(min=min(data.geo$N.Observ))
+percentiles <- percentiles %>% mutate(min=min(data.geo$N.Observ))
+percentiles <- percentiles %>% mutate(p10=quantile(data.geo$N.Observ, 0.1))
+percentiles <- percentiles %>% mutate(p25=quantile(data.geo$N.Observ, 0.25))
+percentiles <- percentiles %>% mutate(p50=quantile(data.geo$N.Observ, 0.50))
+percentiles <- percentiles %>% mutate(p75=quantile(data.geo$N.Observ, 0.75))
+percentiles <- percentiles %>% mutate(p90=quantile(data.geo$N.Observ, 0.9))
+percentiles <- percentiles %>% mutate(max=max(data.geo$N.Observ))
+
+percentiles
+```
+
+**Nº de observaciones en España/Canarias**
+
+```{r}
+LocalRegionsFullNames <- c("Spain","Canarias","Canarias","El Hierro","Fuerteventura","Gran Canaria",
+  "La Gomera","La Palma","Lanzarote","Tenerife")
+
+LocalRegionsCodes <- c("ES","ES7","ES70","ES703","ES704","ES705","ES706","ES707","ES708","ES709")
+
+LocalRegions <- tibble(
+  geo=LocalRegionsCodes,
+  full_name=LocalRegionsFullNames
+)
+
+data.geo %>%
+  filter(geo %in% LocalRegionsCodes) %>%
+  left_join(LocalRegions,by="geo") %>%
+  relocate(full_name,.after = geo)
+```
+
+### Combinaciones existentes de las variables categóricas
+
+Observamos una cantidad (120) de combinaciones posibles con un número de observacions significativas, lo cual en principio es aceptable para un análisis de un dataset.
+
+```{r}
+vars <- colnames(data)[1:(ncol(data)-3)]
+
+data.combinaciones <- data %>%
+  group_by(across(all_of(vars))) 
+
+data.combinaciones %>%
+  summarise(N.observ=dplyr::n(),
+            init.date=min(TIME_PERIOD),
+            end.date=max(TIME_PERIOD)) %>%
+  arrange(desc(N.observ)) %>% 
+  print(n=50)
+```
+
+### Poner las fechas por columnas
+
+Observamos que hay datos bastantes completos, al ser de una toma de datos relativamente reciente y la gran mayoría de las observaciones son predicciones
+
+```{r}
+# pasamos las fechas a columnas de la tabla y añadimos algunos datos 
+data.fechas.pre <- data %>%
+  pivot_wider(names_from = TIME_PERIOD,values_from = values,names_sort = FALSE) %>%
+  relocate(geo) %>% 
+  left_join(get_eurostat_dic("geo"), join_by(geo==code_name)) %>%
+  relocate(full_name,.after=geo)%>%
+  mutate(NUTS=sapply(geo,NUTS.computation)) %>%
+  relocate(NUTS)  %>%
+  mutate(geo2=substr(geo,1,2)) %>% 
+  left_join(get_eurostat_dic("geo")%>%rename(country=full_name),join_by(geo2==code_name)) %>%
+  select(-geo2) %>% 
+  rename(region=full_name) %>%
+  relocate(country,.after = NUTS) %>%
+  arrange(NUTS,country,geo)
+
+data.fechas.pre
+```
+
+**Visualización España/Canarias (máximo 60 columnas y 1000 filas por región)**
+
+```{r}
+# visualización tabla para España y Canarias 
+posRegion <- which(colnames(data.fechas.pre) == "region")
+Ncol <- ncol(data.fechas.pre)
+posSelect <- 1:Ncol 
+data.fechas.pre %>%
+  select(posSelect) %>% 
+  filter(geo %in% LocalRegionsCodes) %>% 
+  group_by(geo) %>%
+  slice_head(n = 1000) %>%
+  ungroup() %>% 
+  relocate(region) %>% 
+  datatable(
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE,  
+    scrollY = "400px", 
+    paging = FALSE,     
+    fixedColumns = list(leftColumns = 1) 
+  ),
+  class = "stripe hover nowrap",  
+  rownames = FALSE  
+)
+```
+
+Observamos series con datos completos.
+
+```{r}
+date_cols <- names(data.fechas.pre)[grepl("^\\d{4}-\\d{2}-\\d{2}$", names(data.fechas.pre))]
+data.tidy <- data.fechas.pre %>%
+  pivot_longer(
+    cols = all_of(date_cols),
+    names_to = "date",
+    values_to = "value"
+  ) %>%
+  mutate(date = as.integer(substr(date, 1, 4))) %>%
+  arrange(region, date) %>%
+  select(-region, -freq)
+data.tidy
+```
+
+Para tener información a nivel de **evolución demográfica** buscaremos en otro dataset información de habitantes en cada país.
+
+## **Comprensión de los datos**
+```{verbatim, echo=FALSE}
+# CÓDIGO DATASET
+dataset.name2 <- "demo_pjan"
+```
+
+```{verbatim, echo=FALSE}
+datasets2 <- read.xlsx("https://ctim.ulpgc.es/AEDV/data/Eurostat.datasets.xlsx") %>%
+  as_tibble()  %>%
+  filter(code==dataset.name2)
+```
+
+```{verbatim,results='hide'}
+# cargamos la tabla y la ordenamos por fechas y países 
+data2 <- get_eurostat(dataset.name2, time_format = "date") %>%
+  as_tibble() %>%
+  arrange(TIME_PERIOD,geo)
+```
+
+```{verbatim, echo=FALSE}
+str(data2)
+```
+
+```{verbatim, echo=FALSE}
+for(col in colnames(data2)){
+  if(is.numeric(data2[[col]])) next
+  if(col=="TIME_PERIOD"){
+    cat("\nCOLUMNA: TIME_PERIOD \n")
+    print(
+      data2 %>%
+        group_by(TIME_PERIOD) %>%
+        summarise(N.observ=dplyr::n())%>%
+        as.matrix() %>%
+        noquote()
+    )
+    next
+  }
+ if(col=="geo"){
+    cat("\nCONTABILIZACIÓN Nº REGIONES NUTS A PARTIR DE LA COLUMNA geo\n")
+    print(
+      tibble(
+        NUTS=sapply(unique(data2[[col]]),NUTS.computation)
+      ) %>%
+        group_by(NUTS) %>%
+        summarise(`Number of Regions`=dplyr::n()) %>%
+        as.matrix() %>%
+        noquote()
+    )
+    next
+ }
+  tb <-  data2 %>%
+    left_join(get_eurostat_dic(col)%>%rename(!!col := code_name),
+              by=col) %>%
+    group_by(!!sym(col),full_name)%>%
+    summarise(N.Observ=dplyr::n()) %>%
+    relocate(N.Observ,.before = full_name)%>%
+    arrange(desc(N.Observ)) %>%
+    mutate(full_name=ifelse(nchar(full_name)<41,full_name,paste0(substr(full_name,1,40),"..")))
+    
+  texto <- paste0("COLUMNA: ",col)
+  if(nrow(tb)>50){
+    texto <- paste0(texto," (",nrow(tb)," opciones, se imprimen 50)")
+    tb <- head(tb,50)
+  }
+  cat(texto,"\n")
+  
+  tb %>% 
+    as.matrix() %>%
+    noquote() %>%
+    print()
+}
+
+```
+
+```{verbatim, echo=FALSE}
+# pasamos las fechas a columnas de la tabla y añadimos algunos datos 
+data.fechas2 <- data2 %>%
+    filter(as.numeric(substr(TIME_PERIOD, 1, 4)) >= 1990,
+       as.numeric(substr(TIME_PERIOD, 1, 4)) <= 2021,
+       age == "TOTAL",
+       sex == "T") %>%
+  pivot_wider(names_from = TIME_PERIOD,values_from = values,names_sort = FALSE) %>%
+  relocate(geo) %>% 
+  left_join(get_eurostat_dic("geo"), join_by(geo==code_name)) %>%
+  relocate(full_name,.after=geo)%>%
+  mutate(NUTS=sapply(geo,NUTS.computation)) %>%
+  relocate(NUTS)  %>%
+  mutate(geo2=substr(geo,1,2)) %>% 
+  left_join(get_eurostat_dic("geo")%>%rename(country=full_name),join_by(geo2==code_name)) %>%
+  select(-geo2) %>% 
+  rename(region=full_name) %>%
+  relocate(country,.after = NUTS) %>%
+  arrange(NUTS,country,geo) %>%
+  select(-region, -freq, -unit, -age, -sex)
+
+data.fechas2
+```
+
+```{verbatim, echo=FALSE}
+date_cols <- names(data.fechas2)[grepl("^\\d{4}-\\d{2}-\\d{2}$", names(data.fechas2))]
+data.tidy.totrans <- data.fechas2 %>%
+  pivot_longer(
+    cols = all_of(date_cols),
+    names_to = "date",
+    values_to = "value"
+  ) %>%
+  filter(NUTS %in% c("0", "EA20", "EU27_2020")) %>%
+  mutate(date = as.integer(substr(date, 1, 4))) %>%
+  mutate(indic_de = "JAN") %>%
+  arrange(country, date) %>%
+  select(NUTS, country, geo, indic_de, date, value)
+data.tidy.totrans
+```
+
+```{verbatim, echo=FALSE}
+data.tidy2 <- data.tidy.totrans %>%
+  mutate(projection = "BSL")
+```
+
+```{verbatim, echo=FALSE}
+data.tidy3 <- data.tidy.totrans %>%
+  mutate(projection = "HMIGR")
+```
+
+```{verbatim, echo=FALSE}
+data.tidy4 <- data.tidy.totrans %>%
+  mutate(projection = "LFRT")
+```
+
+```{verbatim, echo=FALSE}
+data.tidy5 <- data.tidy.totrans %>%
+  mutate(projection = "LMIGR")
+```
+
+```{verbatim, echo=FALSE}
+data.tidy6 <- data.tidy.totrans %>%
+  mutate(projection = "LMRT")
+```
+
+```{verbatim, echo=FALSE}
+data.tidy7 <- data.tidy.totrans %>%
+  mutate(projection = "NMIGR")
+```
+
+
+```{verbatim, echo=FALSE}
+data <- bind_rows(data.tidy, data.tidy2,
+                  data.tidy3, data.tidy4,
+                  data.tidy5, data.tidy6,
+                  data.tidy7) %>%
+  arrange(country, indic_de, date) %>%
+  group_by(NUTS, indic_de) %>%
+  ungroup()
+saveRDS(data, "data.rds")
+```
+
+## **Preparación de los datos**
+
+
+```{r, echo=FALSE}
+data_raw <- read_rds("data.rds")
+```
+
+```{r, echo=FALSE}
+# Limpieza y Adaptación
+data_clean <- data_raw %>%
+  rename(
+    NUTS_ID = geo,
+    NUTS_NAME = country,
+    PROJ = projection,
+    indic_de = indic_de,
+    TIME_PERIOD = date,
+    value = value
+  ) %>%
+  mutate(
+    TIME_PERIOD = as.integer(TIME_PERIOD)
+  ) %>%
+  filter(!is.na(value))
+
+geoj_nuts0 <- readRDS("geoj_nuts0.rds")
+
+```
+
+
+### Creación de Atributos combinados 
+```{r, echo=FALSE}
+mapa_indicadores <- c(
+  "DEATH"      = "Muertes",
+  "DEPRATIO1"  = "Ratio de dependencia 1",
+  "DEPRATIO3"  = "Ratio de dependencia 3",
+  "FMEDAGEPOP" = "Edad Media Mujeres",
+  "JAN"        = "Habitantes a 1 de enero",
+  "LBIRTH"     = "Nacimientos vivos",
+  "MEDAGEPOP"  = "Edad Media Población",
+  "MMEDAGEPOP" = "Edad Media Hombres",
+  "NMIGRAT"    = "Migración Neta (Inmigrantes menos emigrantes)",
+  "OLDDEP1"    = "Ratio de dependencia de edad no trabajadora 1 (Mayores)",
+  "OLDDEP3"    = "Ratio de dependencia de edad no trabajadora 3 (Mayores)",
+  "PC_Y0_14"   = "0-14 años (%)",
+  "PC_Y0_19"   = "0-19 años (%)",
+  "PC_Y15_64"  = "15-64 años (%)",
+  "PC_Y15_74"  = "15-74 años (%)",
+  "PC_Y20_64"  = "20-64 años (%)",
+  "PC_Y65_MAX" = "65-Máximo (%)",
+  "PC_Y80_MAX" = "80-Máximo (%)",
+  "YOUNGDEP1"  = "Ratio de dependencia de edad no trabajadora 1 (Menores)",
+  "YOUNGDEP3"  = "Ratio de dependencia de edad no trabajadora 3 (Menores)"
+)
+
+mapa_proyecciones <- c(
+  "BSL"   = "Escenario base",
+  "HMIGR" = "Alta migración",
+  "LMIGR" = "Baja migración",
+  "LFRT"  = "Baja fertilidad",
+  "LMRT"  = "Baja mortalidad",
+  "NMIGR" = "Sin migración"
+)
+
+opciones_paises_nombres <- c(
+  "Albania" = "Albania",
+  "Austria" = "Austria",
+  "Belgium" = "Bélgica",
+  "Bulgaria" = "Bulgaria",
+  "Croatia" = "Croacia",
+  "Cyprus" = "Chipre",
+  "Czechia" = "Chequia",
+  "Denmark" = "Dinamarca",
+  "Estonia" = "Estonia",
+  "Euro area (EA11-1999, EA12-2001, EA13-2007, EA15-2008, EA16-2009, EA17-2011, EA18-2014, EA19-2015, EA20-2023)" = "Zona Euro",
+  "European Union (EU6-1958, EU9-1973, EU10-1981, EU12-1986, EU15-1995, EU25-2004, EU27-2007, EU28-2013, EU27-2020)" = "Unión Europea",
+  "Finland" = "Finlandia",
+  "France" = "Francia",
+  "Germany" = "Alemania",
+  "Greece" = "Grecia",
+  "Hungary" = "Hungría",
+  "Iceland" = "Islandia",
+  "Ireland" = "Irlanda",
+  "Italy" = "Italia",
+  "Kosovo*" = "Kosovo",
+  "Latvia" = "Letonia",
+  "Liechtenstein" = "Liechtenstein",
+  "Lithuania" = "Lituania",
+  "Luxembourg" = "Luxemburgo",
+  "Malta" = "Malta",
+  "Montenegro" = "Montenegro",
+  "Netherlands" = "Países Bajos",
+  "North Macedonia" = "Macedonia del Norte",
+  "Norway" = "Noruega",
+  "Poland" = "Polonia",
+  "Portugal" = "Portugal",
+  "Romania" = "Rumanía",
+  "Serbia" = "Serbia",
+  "Slovakia" = "Eslovaquia",
+  "Slovenia" = "Eslovenia",
+  "Spain" = "España",
+  "Sweden" = "Suecia",
+  "Switzerland" = "Suiza",
+  "Türkiye" = "Turquía",
+  "Ukraine" = "Ucrania"
+)
+
+# 3. Procesar datos
+data_friend <- data_clean %>%
+  mutate(
+    # Mapeo de nombres amigables
+    Atributo = recode(indic_de, !!!mapa_indicadores),
+    Proyección = recode(PROJ, !!!mapa_proyecciones),
+    País = recode(NUTS_NAME, !!!opciones_paises_nombres),
+        # Clave combinada CORTA: indic_de/projection
+    `Atributo/Proyección` = paste(Atributo, Proyección, sep = "/")
+  ) %>%
+  select(NUTS, NUTS_NAME, País, NUTS_ID, indic_de, Atributo, PROJ,
+         Proyección, `Atributo/Proyección`, TIME_PERIOD, value)
+```
+
+
+### **Proporciones, problema central**
+
+Este gráfico muestra la composición de la población europea en tres grandes grupos de edad (0–14, 15–64 y 65+), comparando varios años clave entre 2001 y 2100.
+La visualización permite observar con claridad cómo la estructura demográfica sufre transformaciones profundas a lo largo del tiempo.
+
+En los primeros años de la serie, especialmente alrededor de 2001, la población en edad de trabajar domina la pirámide, representando la base económica de las sociedades europeas. Sin embargo, a medida que avanzan las décadas, la proporción de personas mayores comienza a aumentar de manera sostenida, primero moderadamente y después de forma acelerada.
+
+En las proyecciones para 2050 y 2100, este fenómeno se vuelve especialmente evidente: el grupo de 65+ crece hasta superar cómodamente al grupo joven (0–14), reflejando un proceso de envejecimiento estructural irreversible.
+La transición demográfica queda así perfectamente ilustrada, mostrando una Europa que se desplaza desde un modelo “joven y productivo” hacia uno “envejecido y dependiente”.
+
+```{r, fig.width= 10}
+df <- data_friend %>%
+  na.omit() %>%
+  filter(
+    TIME_PERIOD %in% c(2001, 2020, 2040, 2060, 2080, 2100),
+    NUTS == "EU27_2020",
+    indic_de %in% c("PC_Y0_14", "PC_Y15_64", "PC_Y65_MAX"),
+    PROJ == "BSL"
+  ) %>%
+  group_by(TIME_PERIOD) %>%
+  mutate(
+    pct = value / sum(value) * 100,
+    lbl = paste0(round(pct, 1), "%")
+  )
+
+plot_ly(
+  df,
+  labels = ~Atributo,
+  values = ~value,
+  type = "pie",
+  frame = ~TIME_PERIOD,
+  textinfo = "label+percent"
+) %>%
+  layout(
+    title = list(
+      text = "Evolución de la Estructura por Grupos de Edad en Europa (2001–2100)",
+      x = 0.5,
+      xanchor = "center",
+      font = list(size = 18, face = "bold")
+    ),
+     margin = list(t = 80) 
+  )
+```
+
+### **Dependencias, la Buena, la Fea y la Mala.**
+
+Este gráfico representa la evolución de distintos tipos de dependencia en España (dependencia juvenil, dependencia de mayores y dependencia total) entre 2030 y 2100.
+
+La interpretación revela que todas las tasas de dependencia experimentan incrementos significativos a lo largo del periodo analizado. La dependencia juvenil se mantiene relativamente estable, lo que indica que la población joven no crecerá ni disminuirá de forma proporcional.
+
+La dependencia de mayores, en cambio, aumenta con un ritmo pronunciado, impulsada por la combinación de baja natalidad, aumento de la esperanza de vida y reducción de la población activa.
+Como consecuencia, la dependencia total crece también de forma sostenida, reflejando que el número de personas que necesitan apoyo económico y social será cada vez mayor en relación con quienes trabajan.
+
+Este patrón anticipa importantes desafíos en sostenibilidad fiscal, pensiones y mercado laboral en el futuro.
+```{r, fig.width= 10}
+df_barras <- data_friend %>%
+  filter(
+    NUTS_ID == "ES",               # Solo España
+    PROJ == "LMIGR",             # Escenario Base
+    indic_de %in% c("OLDDEP1", "DEPRATIO1", "YOUNGDEP1"), # Los dos indicadores clave
+    TIME_PERIOD %in% seq(2030, 2100, by = 10)   # Cada 10 años para que sea legible
+  ) %>%
+  # Crear nombres más bonitos para la leyenda
+  mutate(Grupo = recode(indic_de, 
+                        "OLDDEP1" = "Tasa de dependencia 1 (65-MAX)",
+                        "DEPRATIO1" = "Tasa de dependencia total",
+                        "YOUNGDEP1" = "Tasa dependencia 1 (0-14)"))
+
+# Generar el Gráfico de Barras
+p <- ggplot(df_barras, aes(x = Grupo, y = value, fill = Grupo)) +
+  facet_wrap(~TIME_PERIOD, ncol = 4) +
+  geom_col(position = "dodge") + # 'dodge' pone las barras una al lado de la otra
+  
+  scale_fill_manual(values = c("Tasa de dependencia total" = "#2E86C1", 
+                               "Tasa dependencia 1 (0-14)" = "#E74C3C",
+                               "Tasa de dependencia 1 (65-MAX)" = "yellow")) +
+  labs(
+    title = "Evolución: Trabajadores vs Pensionistas en España",
+    subtitle = "Proyección con una Baja Migración (2030-2100)",
+    x = "Dependencia",
+    y = "Tasas (%)",
+    fill = "Tasas de dependencia"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.text.x = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+        )
+ggplotly(p)
+```
+
+### **Evolución del problema**
+
+Este gráfico permite comparar cómo evolucionaría un indicador (en este caso el Índice de dependencia 1) bajo diferentes escenarios demográficos definidos por Eurostat (como NMIGR, HMIGR, LMIGR…).
+
+La visualización muestra claramente que el futuro demográfico no es único, sino que depende de factores clave como la migración, la fertilidad y la mortalidad. Este índice es una dependencia entre la población activa y no activa (menores y mayores), por lo que, viendo el cambio del ratio según el tipo de proyección, podemos inferir que la diferencia entre ellas es debido a la proprción de población "jubilada" en cada escenario.
+Por ejemplo, en escenarios sin migración, el envejecimiento y la dependencia aumentan de forma mucho más rápida y pronunciada. En cambio, en escenarios de alta migración, la incorporación de población joven mitiga parcialmente el aumento de la dependencia, retrasando los efectos más intensos del envejecimiento.
+
+Aunque los escenarios divergen en magnitud, todos coinciden en la dirección del cambio: la dependencia aumenta y el envejecimiento se intensifica. La incertidumbre es cuantitativa, pero no cualitativa.
+```{r, fig.width= 10}
+df_plot <- data_friend %>%
+  filter(NUTS_NAME == "Spain",
+         indic_de == "DEPRATIO1") %>%
+  mutate(TIME_PERIOD = as.numeric(TIME_PERIOD)) %>%
+  arrange(TIME_PERIOD)
+
+p <- ggplot(df_plot, aes(
+  x = TIME_PERIOD, y = value,
+  color = Proyección, group = Proyección,
+  text = paste0(
+    "<b>", Proyección, "</b><br>",
+    "Año: ", TIME_PERIOD, "<br>",
+    "Valor: ", round(value, 2)
+  )
+)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 1.1) +
+  labs(
+    title = "Evolución Temporal del Ratio de Dependencia 1 (DEPRATIO1)",
+    x = "Año",
+    y = "Valor (%)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+ggplotly(p, tooltip = "text")
+
+```
+
+
+## **Modelado**
+
+### **Hondando más en el futuro**
+
+El gráfico ARIMA muestra la serie histórica junto con una predicción a futuro y un intervalo de confianza del 95%.
+La interpretación general indica que:
+
+-los indicadores de envejecimiento mantienen una trayectoria ascendente constante,
+
+-los indicadores de población joven tienden a estabilizarse o disminuir y por ende el ratio de dependencia aumenta de forma sostenida.
+
+La banda de confianza se ensancha con el horizonte temporal, reflejando el incremento natural de la incertidumbre.
+Este gráfico confirma que, incluso con variaciones potenciales, el envejecimiento seguirá intensificándose en las próximas décadas.
+```{r, fig.width= 10}
+datos_ts <- data_friend %>%
+      filter(NUTS_ID == "ES",
+             indic_de == "DEPRATIO1",
+             PROJ == "LMIGR") %>%
+      arrange(TIME_PERIOD) %>%
+      as_tsibble(index = TIME_PERIOD) %>%
+      fill_gaps()
+
+datos_pred <- datos_ts %>%
+  model(ARIMA(value, stepwise = TRUE)) %>%
+  forecast(h = 10)
+  
+p <- GraficoDinamicoArima95CI(
+    data = datos_ts,
+    date = "TIME_PERIOD",
+    value = "value", 
+    prediccion = datos_pred,
+    TITLE = paste("Predicción ARIMA Tasa de dependencia con proyección de baja inmigración")
+  )
+  
+  p %>% layout(
+    font = list(family = "Arial"),
+    xaxis = list(title = "Año", tickformat = "d")
+  )
+```
+
+### **Norte vs Sur: brecha de dependencia**
+El mapa permite observar diferencias espaciales profundas dentro de Europa:
+
+Los países del sur y oeste de Europa (España, Portugal, Italia, Grecia, Francia) muestran tonos más oscuros, indicando niveles muy elevados de dependencia de mayores incluso bajo un escenario favorable de alta migración.
+Esto evidencia que los procesos de envejecimiento en estas regiones tienen raíces estructurales difíciles de compensar mediante migración.
+
+Países del este de Europa presentan variabilidad notable: algunos muestran niveles moderados, mientras que otros se acercan a los valores más altos del continente. Esta heterogeneidad refleja diferencias en natalidad, migración neta y transición demográfica.
+
+Las regiones del norte de Europa, en general, exhiben valores más equilibrados. Esto sugiere que sus dinámicas demográficas caracterizadas por natalidad algo mayor, políticas migratorias activas o mejor equilibrio poblacional mitigan en parte el envejecimiento.
+
+```{r, fig.width= 10}
+  df <- data_friend %>%
+    filter(
+      TIME_PERIOD == 2050,
+      indic_de == "OLDDEP1",
+      PROJ == "HMIGR"
+    ) %>%
+    group_by(NUTS_ID, NUTS_NAME) %>%
+    select(NUTS_ID, NUTS_NAME, value)
+
+  # Cruzar datos con el mapa
+  idx <- match(geoj_nuts0@data$NUTS_ID, df$NUTS_ID)
+  valor <- df$value[idx]
+  names_matched <- df$NUTS_NAME[idx] 
+
+  # CREAR ETIQUETAS CON FORMATO % Y 2 DECIMALES
+  etiquetas <- paste0(
+    "<strong>", ifelse(!is.na(names_matched), names_matched, geoj_nuts0@data$NUTS_NAME), "</strong>",
+    " (", geoj_nuts0@data$NUTS_ID, ")<br>",
+    "Valor: ", paste(round(valor, 2), "%")
+  )
+
+  etiquetas_html <- lapply(etiquetas, function(x) shiny::HTML(x))
+  # GENERAR MAPA Y AJUSTAR VISTA
+  # Guardamos el mapa base en una variable 'm'
+  m <- MapaCoroplético(
+    geoj = geoj_nuts0,
+    value = valor,
+    region_labels = etiquetas_html,
+    legend_title = paste("Índice dependencia 1 (65-MAX)", "|", 2050)
+  )
+  
+  # APLICAR ZOOM Y CENTRADO PERSONALIZADO
+  # lng=10, lat=50 centra en Europa. zoom=3 aleja la cámara para ver contexto.
+  # Si quieres ver TODO el mundo, pon zoom=2
+  m %>% 
+    addTiles() %>%
+    setView(lng = 10, lat = 52, zoom = 3)
+```
+
+### **Posibles aceleraciones o desacelereaciones**
+Los dos gráficos comparan la relación entre un indicador y el tiempo antes y después de aplicar una transformación Yeo–Johnson que mejora la linealidad.
+
+En el gráfico original se observan desviaciones claras de la tendencia lineal, lo que indica una evolución no perfectamente proporcional al paso del tiempo. Tras aplicar la transformación, la serie se ajusta mucho mejor a una regresión lineal, aumentando el valor de R² e indicando que la estructura temporal del indicador contiene patrones que solo se revelan claramente en una escala transformada.
+
+Este análisis sugiere que los procesos demográficos pueden presentar fases de aceleración o ralentización que no son visibles en su escala original.
+
+```{r, fig.width= 10}
+yeo_johnson <- function(y, lambda) {
+  out <- numeric(length(y))
+  idx_pos <- y >= 0
+  idx_neg <- !idx_pos
+  if (abs(lambda) < 1e-5) out[idx_pos] <- log(y[idx_pos] + 1)
+  else out[idx_pos] <- ((y[idx_pos] + 1)^lambda - 1) / lambda
+  if (abs(lambda - 2) < 1e-5) out[idx_neg] <- -log(-y[idx_neg] + 1)
+  else out[idx_neg] <- -((-y[idx_neg] + 1)^(2 - lambda) - 1) / (2 - lambda)
+  return(out)
+}
+
+# 2. Preparar datos: España, Dependencia Vejez, Escenario Base
+df_spain_yj <- data_friend %>%
+  filter(
+    NUTS_ID == "ES",               # Solo España
+    indic_de == "OLDDEP1",     # Tasa de Dependencia (El indicador clave)
+    PROJ == "BSL"              # Escenario Base
+  ) %>%
+  arrange(TIME_PERIOD) %>%
+  select(TIME_PERIOD, value)
+
+# 3. Optimización "Casera" de Lambda
+# Buscamos qué Lambda consigue la mejor correlación lineal (R2 más alto)
+x <- df_spain_yj$TIME_PERIOD
+y <- df_spain_yj$value
+
+best_r2 <- 0
+best_lambda <- 1
+
+# Probamos lambdas de -2 a 2 en pasos pequeños
+for (l in seq(-2, 2, by = 0.1)) {
+  y_t <- yeo_johnson(y, l)
+  current_r2 <- summary(lm(y_t ~ x))$r.squared
+  if (current_r2 > best_r2) {
+    best_r2 <- current_r2
+    best_lambda <- l
+  }
+}
+
+# 4. Aplicar la mejor transformación encontrada
+df_spain_yj$transformed_value <- yeo_johnson(df_spain_yj$value, best_lambda)
+
+# 5. Calcular los R2 finales para mostrar en el título
+r2_original <- summary(lm(value ~ TIME_PERIOD, data = df_spain_yj))$r.squared
+r2_optimo   <- best_r2
+
+# --- VISUALIZACIÓN CON PLOTLY (Dos paneles) ---
+
+# Gráfico 1: Datos Originales (Escala Real)
+p1 <- plot_ly(df_spain_yj, x = ~TIME_PERIOD, y = ~value, name = "Original") %>%
+  add_markers(marker = list(color = "#E74C3C", opacity = 0.6)) %>%
+  add_lines(y = fitted(lm(value ~ TIME_PERIOD, data = df_spain_yj)),
+            name = "Tendencia Lineal", line = list(color = "#2c3e50", dash = "dash")) %>%
+  layout(
+    annotations = list(
+      x = 0.5, y = 1.1, text = paste0("<b>Datos Originales</b><br>R² = ", round(r2_original, 4)), 
+      showarrow = F, xref='paper', yref='paper'
+    ),
+    yaxis = list(title = "Tasa Dependencia (%)")
+  )
+
+# Gráfico 2: Datos Transformados (Escala Estadística)
+p2 <- plot_ly(df_spain_yj, x = ~TIME_PERIOD, y = ~transformed_value, name = "Transformado") %>%
+  add_markers(marker = list(color = "#2E86C1", opacity = 0.6)) %>%
+  add_lines(y = fitted(lm(transformed_value ~ TIME_PERIOD, data = df_spain_yj)),
+            name = "Ajuste Óptimo", line = list(color = "#2c3e50")) %>%
+  layout(
+    annotations = list(
+      x = 0.5, y = 1.1, text = paste0("<b>Transf. Yeo-Johnson</b> (λ=", best_lambda, ")<br>R² = ", round(r2_optimo, 4)), 
+      showarrow = F, xref='paper', yref='paper'
+    ),
+    yaxis = list(title = "Valor Transformado")
+  )
+
+# Combinar
+subplot(p1, p2, titleX = TRUE, shareX = TRUE, margin = 0.05) %>%
+  layout(
+    title = "España: Optimización de Tendencia (OLDDEP1)",
+    showlegend = FALSE,
+    margin = list(t = 80)
+  )
+```
+
+### **Causalidad de los factores problemáticos**
+La matriz de correlación muestra cómo se relacionan estadísticamente distintos indicadores demográficos.
+
+Destacan correlaciones muy fuertes entre los indicadores de envejecimiento (PC_Y65_MAX, OLDDEP1, MEDAGEPOP), lo que confirma que tienden a aumentar simultáneamente.
+Las correlaciones negativas entre población joven y población mayor revelan un desplazamiento relativo entre cohortes: a medida que los mayores aumentan, el peso de las cohortes jóvenes disminuye.
+
+Asimismo, la población activa muestra una correlación negativa con la dependencia de mayores, indicando que la reducción del grupo 15–64 repercute directamente en el aumento del ratio de dependencia.
+Esta matriz evidencia que las transformaciones demográficas están altamente interconectadas.
+
+```{r, fig.width= 10}
+df_correlacion <- data_friend %>%
+  filter(
+    NUTS_ID == "ES",       # Solo España
+    PROJ == "BSL"      # Escenario Base
+  ) %>%
+  select(TIME_PERIOD, indic_de, value) %>%
+  # Pivotamos: convertimos los indicadores en columnas
+  pivot_wider(names_from = indic_de, values_from = value) %>%
+  # Quitamos la columna año (no queremos correlacionar el año, sino las variables entre sí)
+  select(-TIME_PERIOD)
+
+# 2. Calcular la Matriz de Correlación (Función base de R)
+matriz_num <- cor(df_correlacion, use = "complete.obs")
+
+# 3. Transformar la matriz a formato largo para ggplot
+# Esto convierte la tabla cuadrada en una lista de pares: Var1, Var2, Correlación
+df_grafico <- as.data.frame(as.table(matriz_num)) %>%
+  rename(Variable1 = Var1, Variable2 = Var2, Correlacion = Freq)
+
+# 4. Generar el Heatmap con ggplot2
+p <- ggplot(df_grafico, aes(x = Variable1, y = Variable2, fill = Correlacion)) +
+  # Dibujamos los cuadrados
+  geom_tile(color = "white") +
+  
+  # Escribimos el valor de la correlación dentro (redondeado a 2 decimales)
+  geom_text(aes(label = round(Correlacion, 2)), size = 2.5) +
+  
+  # Escala de colores: Rojo (-1), Blanco (0), Azul (+1)
+  scale_fill_gradient2(
+    low = "#E74C3C",    # Rojo para negativa
+    mid = "white",      # Blanco para neutra
+    high = "#2E86C1",   # Azul para positiva
+    midpoint = 0, 
+    limit = c(-1, 1), 
+    name = "Corr"
+  ) +
+  
+  labs(
+    title = "Matriz de Correlación de Indicadores (España)",
+    subtitle = "Relación estadística entre variables demográficas",
+    x = "", y = ""
+  ) +
+  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    panel.grid = element_blank() # Quitamos la rejilla para que se vea limpio
+  )
+ggplotly(p)
+```
+
+### **Visualización de países con caracterísiticas demográficas diferente**
+El PCA proyecta países en un plano formado por dos componentes principales que capturan la mayor parte de la variabilidad demográfica.
+
+La interpretación del biplot muestra que la primera componente separa con claridad a los países con poblaciones envejecidas (España, Italia, Portugal, Grecia) de países con poblaciones más jóvenes (Turquía, Albania, Rumanía).
+La segunda componente refleja diferencias relacionadas con patrones migratorios y niveles de natalidad.
+
+España aparece en un grupo de países con alto riesgo demográfico, caracterizado por baja natalidad, migración insuficiente y rápida transición hacia una población envejecida.
+Las flechas de las variables indican qué indicadores ejercen mayor influencia en cada dirección, confirmando la coherencia estructural de la transformación principal.
+
+```{r, fig.width= 10}
+# --- PASO 1: CALCULAR EL PCA ---
+df_pca_prep <- data_friend %>%
+  filter(
+    TIME_PERIOD == 2022,
+    PROJ == "BSL",
+    NUTS_ID != "EU27_2020",
+    NUTS_ID != "EA20"
+  ) %>%
+  # Indicadores críticos
+  filter(indic_de %in% c("OLDDEP1", "MEDAGEPOP", "LBIRTH", "NMIGRAT", "PC_Y15_64")) %>%
+  select(País, indic_de, value) %>%
+  pivot_wider(names_from = indic_de, values_from = value) %>%
+  na.omit()
+
+datos_num <- df_pca_prep %>% select(-País)
+rownames(datos_num) <- df_pca_prep$País
+
+pca_obj <- prcomp(datos_num, scale. = TRUE)
+
+dim_x <- "PC1"
+dim_y <- "PC2"
+
+# --- 1. Datos de países ---
+df_ind <- as.data.frame(pca_obj$x)
+df_ind$País <- rownames(df_ind)
+
+df_ind$Grupo <- dplyr::case_when(
+  df_ind$País == "España"                          ~ "España",
+  df_ind$País %in% c("Italia", "Portugal", "Grecia") ~ "Sur Europa (Riesgo)",
+  TRUE                                             ~ "Resto de Europa"
+)
+
+# --- 2. Datos de variables (flechas) ---
+df_vars <- as.data.frame(pca_obj$rotation)
+df_vars$var_cod <- rownames(df_vars)
+# nombre en español usando el diccionario
+df_vars$var_es <- ifelse(
+  !is.na(mapa_indicadores[df_vars$var_cod]),
+  mapa_indicadores[df_vars$var_cod],
+  df_vars$var_cod
+)
+
+# Escalado de flechas
+mult <- min(
+  (max(df_ind[, dim_x]) - min(df_ind[, dim_x])) /
+    (max(df_vars[, dim_x]) - min(df_vars[, dim_x])),
+  (max(df_ind[, dim_y]) - min(df_ind[, dim_y])) /
+    (max(df_vars[, dim_y]) - min(df_vars[, dim_y]))
+) * 0.8
+
+df_vars$x_scaled <- df_vars[, dim_x] * mult
+df_vars$y_scaled <- df_vars[, dim_y] * mult
+
+# Paleta para las variables
+colores_vars <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#17becf")
+
+# --- 3. Gráfico base (puntos/países) ---
+hc <- df_ind %>%
+  hchart(
+    "scatter",
+    hcaes(x = !!sym(dim_x), y = !!sym(dim_y),
+          group = Grupo, name = País)
+  ) %>%
+  hc_colors(c("black", "#95A5A6", "#D35400")) %>%
+  hc_title(text = "Mapa de Riesgo Demográfico") %>%
+  hc_subtitle(text = "España destacada en negro. Pasa el ratón sobre puntos y líneas para ver detalles.") %>%
+  hc_tooltip(
+    pointFormat = "<b>{point.name}</b><br>Dim 1: {point.x:.2f}<br>Dim 2: {point.y:.2f}"
+  ) %>%
+  hc_add_theme(hc_theme_smpl())
+
+# --- 4. Añadir flechas (variables) ---
+for (i in 1:nrow(df_vars)) {
+  hc <- hc %>%
+    hc_add_series(
+      type = "line",
+      data = list(
+        c(0, 0),
+        c(df_vars$x_scaled[i], df_vars$y_scaled[i])
+      ),
+      name  = df_vars$var_es[i],      # nombre en español en la leyenda
+      color = colores_vars[i],
+      lineWidth = 3,
+      marker = list(enabled = FALSE),
+      showInLegend = TRUE,
+      enableMouseTracking = TRUE
+    )
+}
+
+# --- IMPRIMIR EL HIGHCHART ---
+hc
+```
+
+
+## **Evaluación**
+
+La fase de evaluación tiene como objetivo comprobar si los métodos aplicados responden adecuadamente a las preguntas de investigación planteadas y si las técnicas seleccionadas son coherentes con la naturaleza del fenómeno demográfico europeo.
+
+### **Coherencia entre análisis descriptivo y modelado**
+
+Los modelos ARIMA aplicados muestran una evolución futura consistente con los patrones observados en los análisis descriptivos:
+
+- Tendencia ascendente en los indicadores de envejecimiento (PC_Y65_MAX, OLDDEP1).  
+- Estabilidad o ligera disminución de la población joven (PC_Y0_14).  
+- Crecimiento continuado del ratio de dependencia (DEPRATIO1).
+
+Esta alineación confirma que la modelización refuerza la evidencia observada en los datos brutos.
+
+### **Evaluación del rendimiento de los modelos**
+
+Se evaluó la calidad de los modelos mediante:
+
+- Ajuste visual entre la serie real y la serie predicha.  
+- Estimación de intervalos de confianza del 95%.  
+- Comparación del ajuste lineal antes y después de aplicar transformaciones Yeo–Johnson.
+
+El uso de transformaciones permitió detectar **no linealidades**, mejorando la capacidad predictiva en determinados indicadores.
+
+### **Comparación con otros métodos**
+
+El uso de ARIMA fue adecuado para series univariantes, pero se identificaron limitaciones como no considerar relaciones entre indicadores (limitación estructural) o incorporar impactos externos (migración, políticas públicas, shocks).
+
+### **Validación mediante análisis multivariante**
+
+El PCA actuó como método complementario de validación, confirmó la separación entre países envejecidos y países jóvenes y mostró coherencia entre la estructura estadística y las interpretaciones teóricas. También, identificó patrones espaciales que el modelado temporal no detecta.
+
+### **Limitaciones detectadas**
+
+El análisis permite identificar varias debilidades, tanto del modelo como del dataset:
+
+Dependencia exclusiva de proyecciones oficiales: 
+- Eurostat realiza estimaciones basadas en supuestos que pueden cambiar.
+
+- Escasa profundidad histórica para algunos países.
+
+- Series imputadas o agregadas en territorios con menor disponibilidad de datos.
+
+- Modelos ARIMA incapaces de incorporar relaciones causales entre variables.
+
+- Falta de granularidad territorial al trabajar principalmente con NUTS 0.
+
+
+## **Despliegue**
+
+El despliegue del proyecto se llevó a cabo mediante dos productos principales:
+una memoria completa documentando el proceso CRISP-DM y un cuadro de mandos interactivo desarrollado en RMarkdown + Shiny.
+
+### **Memoria del proyecto**
+
+La memoria recoge:
+
+- Todo el ciclo CRISP-DM aplicado de forma estructurada.
+
+- Resultados descriptivos, modelizaciones y visualizaciones.
+
+- Interpretaciones detalladas para cada técnica empleada.
+
+- Reflexiones críticas sobre la validez de los modelos y el dataset.
+
+Este documento constituye el soporte académico del proyecto y permite evaluar de forma exhaustiva el proceso seguido.
+
+### **Cuadro de mandos interactivo (Dashboard)**
+
+El dashboard fue diseñado en flexdashboard + Shiny, integrando visualizaciones dinámicas, filtros inteligentes y componentes interactivos.
+Su estructura facilita explorar:
+
+- Series temporales.
+
+- Comparaciones entre países.
+
+- Escenarios de proyección demográfica.
+
+- Predicciones ARIMA.
+
+- Matrices de correlación.
+
+- Transformaciones estadísticas (Logaritimicas, Raíz cuadrada y Yeo-Jhonson).
+
+- Análisis PCA.
+
+- Mapas coropléticos.
+
+# **Conclusiones y trabajo futuro**
+
+## **Conclusiones**
+
+En el presente proyecto se ha analizado la evolución demográfica de los países europeos utilizando información histórica y proyecciones hasta el año 2100. A partir del tratamiento estadístico y visual de los datos, se obtiene un conjunto de conclusiones relevantes:
+
+### **Europa avanza hacia un envejecimiento estructural severo**
+Los indicadores analizados muestran de manera consistente que:
+
+- La proporción de población **mayor de 65 años** aumenta de forma sostenida.
+- La proporción de población **joven (0–14)** desciende o se mantiene estable en la mayoría de países.
+- La población **en edad de trabajar** disminuye gradualmente.
+
+Este comportamiento genera un **desajuste creciente** entre población dependiente y población activa, visible en todos los escenarios de proyección de Eurostat.
+
+### **La tasa de dependencia crecerá incluso en escenarios favorables**
+Incluso bajo supuestos de alta migración o baja mortalidad, el **DEPRATIO1** y otros ratios de dependencia continúan aumentando.
+
+Esto implica que, desde una perspectiva estadística, **el envejecimiento es inevitable**, aunque puede moderarse parcialmente mediante políticas migratorias o de natalidad.
+
+### **Los modelos ARIMA confirman la dirección de las tendencias**
+Los modelos de predicción implementados permiten observar que:
+
+- Las series presentan **tendencias ascendentes claras** en los indicadores de envejecimiento.
+- La banda de confianza crece con el horizonte temporal, pero **nunca revierte la tendencia**, lo que valida la consistencia del modelo con las proyecciones oficiales.
+
+### **Falta de indicadores económicos complementarios**
+
+El dataset es exclusivamente demográfico. Para evaluar impacto socioeconómico, sería necesario incluir:
+
+- PIB
+
+- Empleo
+
+- Gasto social
+
+- Migración cualificada
+
+- Indicadores de envejecimiento activo
+
+Esta limitación se vincula directamente con la sección de trabajo futuro.
+
+### **Series demasiado cortas para ciertos modelos**
+
+Algunos países tienen menos de 6–8 observaciones válidas, lo que reduce la capacidad predictiva de ARIMA y limita la potencia de modelos avanzados.
+
+## **Trabajo futuro**
+
+A partir de las limitaciones detectadas en el dataset y del desarrollo actual del dashboard, se proponen varias líneas de mejora:
+
+ **1.** Incorporar modelos predictivos más complejos
+La estructura no lineal de algunos indicadores sugiere explorar:
+
+- Prophet
+- Modelos ETS
+- Redes neuronales
+- ARIMA + ML
+
+**2.** Extender el análisis a niveles territoriales NUTS 1 y NUTS 2
+
+Esto permitiría:
+
+- Detectar desigualdades internas dentro de un país.
+
+- Construir políticas regionales más precisas.
+
+**3.** Enriquecer el dataset con indicadores económicos
+
+Para evaluar impacto y sostenibilidad del envejecimiento:
+
+- PIB per cápita.
+
+- Empleo.
+
+- Inversión sanitaria.
+
+- Pensiones y gasto social.
+
+- Esto permitiría análisis multivariantes mucho más potentes.
+
+**4.** Mejorar el tratamiento de datos faltantes
+
+Se propone:
+
+- Imputación con métodos estadísticos (mice, imputeTS).
+
+- Señalización visual de series incompletas.
+
+- Indicadores de calidad por país.
+
+
+**5.** Implementar clustering y clasificación de perfiles demográficos
+
+- Esto permitiría clasificar países según su riesgo demográfico.
+
+**6.** Incorporar líneas de tendencia estructural
+
+Sería útil incluir:
+
+- Modelos logísticos.
+
+- Modelos de crecimiento poblacional.
+
+- Series censales.
+
+## **Anexo. Seguimiento temporal actividades del proyecto** {.unnumbered}
+
+```{=html}
+<!-- Lo primero que hay que hacer es compartir en modo lectura la hoja de cálculo Google Sheet que habremos descargado del Campus Virtual para registrar las sesiones de trabajo. A continuación se sustituirá, debajo, el enlace que figura en la lectura del archivo (read_sheet) por el enlace compartido que has creado. 
+
+La primera vez que abras la hoja de cálculo google sheet desde código en R, desde la consola te pedirá autorización para usar una cuenta Google. 
+
+ES OBLIGATORIO TENER ACTUALIZADO ESTE APARTADO EN CADA ENTREGA DEL PROYECTO. 
+
+CADA SESIÓN DE TRABAJO SE DEBE REGISTRAR EN LA GOOGLE SHEET EN EL MOMENTO DE REALIZARSE. EN PARTICULAR EN UNA ENTREGA  DEL PROYECTO NO PUEDEN APARECER SESIONES DE TRABAJOS NUEVAS CON FECHAS ANTERIORES A LA ENTREGA ANTERIOR DEL PROYECTO. 
+-->
+```
+
+```{r}
+gs4_deauth()
+SeguimientoActividadesProyecto <-
+  read_sheet("https://docs.google.com/spreadsheets/d/1lqEDk-88KKe0lGqWNQdUrezcG86nqmfDYzpke2FLilI/edit?usp=sharing") %>%
+  as_tibble() 
+```
+
+**TOTAL HORAS TRABAJADAS EN EL PROYECTO :** `r  round(sum(SeguimientoActividadesProyecto$MINUTES/60),digits=2)`
+
+```{r}
+actividades <- c("Introducción","Aportaciones del trabajo","Compresión del negocio","Comprensión de los datos","Preparación de los datos","Modelado","Evaluación","Despliegue","Conclusiones y Trabajo Futuro","Otros")
+p <- SeguimientoActividadesProyecto%>%
+  group_by(ACTIVITY)%>%
+   summarise(
+     HORAS=round(sum(MINUTES)/60,digits = 1)
+   )%>%
+  mutate(ACTIVITY=factor(ACTIVITY,levels=actividades)) %>% 
+  ggplot(aes(ACTIVITY,HORAS)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label=HORAS),size=3,colour = "blue",nudge_y = 0.2)+ 
+  theme(axis.text.x = element_text(angle = 45,hjust=1))+
+  labs(x="",y="HORAS TRABAJADAS",title = "TOTAL HORAS TRABAJADAS EN EL PROYECTO POR ACTIVIDAD")
+
+ggplotly(p)
+  
+ 
+```
+
+**DESGLOSE DETALLADO DE LAS SESIONES DE TRABAJO**
+
+```{r}
+SeguimientoActividadesProyecto%>% 
+  datatable(
+  options = list(
+    scrollX = TRUE,   # Scroll horizontal
+    scrollY = "400px", # Scroll vertical
+    paging = FALSE     # Desactiva paginación si quieres solo scroll
+  )
+)
+```

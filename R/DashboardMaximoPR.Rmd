@@ -1,0 +1,1633 @@
+---
+title: "Cuadro de Mandos – Índices de población"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: column
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(flexdashboard)
+library(scales)
+library(shiny)
+library(plotly)
+library(leaflet)
+library(tsibble)
+library(fable)
+library(feasts)
+library(geojsonio)
+library(lubridate)
+library(highcharter)
+library(RColorBrewer)
+
+source("utilidades.R")
+
+data_raw <- read_rds("data.rds")
+
+# Limpieza y Adaptación
+data_clean <- data_raw %>%
+  rename(
+    NUTS_ID = geo,
+    NUTS_NAME = country,
+    PROJ = projection,
+    indic_de = indic_de,
+    TIME_PERIOD = date,
+    value = value
+  ) %>%
+  mutate(
+    TIME_PERIOD = as.integer(TIME_PERIOD),
+    Atributo = indic_de
+  ) %>%
+  filter(!is.na(value))
+
+geoj_nuts0 <- readRDS("geoj_nuts0.rds")
+```
+
+```{r}
+# Listas para los selectores del dashboard
+opciones_paises_nombres <- c(
+  "Albania"            = "Albania",
+  "Austria"            = "Austria",
+  "Bélgica"            = "Belgium",
+  "Bulgaria"           = "Bulgaria",
+  "Croacia"            = "Croatia",
+  "Chipre"             = "Cyprus",
+  "Chequia"            = "Czechia",
+  "Dinamarca"          = "Denmark",
+  "Estonia"            = "Estonia",
+  "Zona Euro"          = "Euro area (EA11-1999, EA12-2001, EA13-2007, EA15-2008, EA16-2009, EA17-2011, EA18-2014, EA19-2015, EA20-2023)",
+  "Unión Europea"      = "European Union (EU6-1958, EU9-1973, EU10-1981, EU12-1986, EU15-1995, EU25-2004, EU27-2007, EU28-2013, EU27-2020)",
+  "Finlandia"          = "Finland",
+  "Francia"            = "France",
+  "Alemania"           = "Germany",
+  "Grecia"             = "Greece",
+  "Hungría"            = "Hungary",
+  "Islandia"           = "Iceland",
+  "Irlanda"            = "Ireland",
+  "Italia"             = "Italy",
+  "Kosovo"             = "Kosovo*",
+  "Letonia"            = "Latvia",
+  "Liechtenstein"      = "Liechtenstein",
+  "Lituania"           = "Lithuania",
+  "Luxemburgo"         = "Luxembourg",
+  "Malta"              = "Malta",
+  "Montenegro"         = "Montenegro",
+  "Países Bajos"       = "Netherlands",
+  "Macedonia del Norte"= "North Macedonia",
+  "Noruega"            = "Norway",
+  "Polonia"            = "Poland",
+  "Portugal"           = "Portugal",
+  "Rumanía"            = "Romania",
+  "Serbia"             = "Serbia",
+  "Eslovaquia"         = "Slovakia",
+  "Eslovenia"          = "Slovenia",
+  "España"             = "Spain",
+  "Suecia"             = "Sweden",
+  "Suiza"              = "Switzerland",
+  "Turquía"            = "Türkiye",
+  "Ucrania"            = "Ukraine"
+)
+
+
+opciones_indicadores <- c(
+  "Muertes"                                                     = "DEATH",
+  "Ratio de dependencia 1"                                      = "DEPRATIO1",
+  "Ratio de dependencia 3"                                      = "DEPRATIO3",
+  "Edad Media Mujeres"                                          = "FMEDAGEPOP",
+  "Habitantes a 1 de enero"                                     = "JAN",
+  "Nacimientos vivos"                                           = "LBIRTH",
+  "Edad Media Población"                                        = "MEDAGEPOP",
+  "Edad Media Hombres"                                          = "MMEDAGEPOP",
+  "Migración Neta (Inmigrantes menos emigrantes)"               = "NMIGRAT",
+  "Ratio dependencia edad no activa 1 (Mayores)"     = "OLDDEP1",
+  "Ratio dependencia edad no activa 3 (Mayores)"     = "OLDDEP3",
+  "0-14 años (%)"                                               = "PC_Y0_14",
+  "0-19 años (%)"                                               = "PC_Y0_19",
+  "15-64 años (%)"                                              = "PC_Y15_64",
+  "15-74 años (%)"                                              = "PC_Y15_74",
+  "20-64 años (%)"                                              = "PC_Y20_64",
+  "65-Máximo (%)"                                                    = "PC_Y65_MAX",
+  "80-Máximo (%)"                                                    = "PC_Y80_MAX",
+  "Ratio dependencia edad no activa 1 (Menores)"     = "YOUNGDEP1",
+  "Ratio dependencia edad no activa 3 (Menores)"     = "YOUNGDEP3"
+)
+
+opciones_proyecciones <- opciones_proyecciones <- c(
+  "Escenario base" = "BSL",
+  "Alta migración" = "HMIGR",
+  "Baja migración" = "LMIGR",
+  "Baja fertilidad" = "LFRT",
+  "Baja mortalidad" = "LMRT",
+  "No Migración" = "NMIGR"
+)
+
+paises_es       <- setNames(names(opciones_paises_nombres), opciones_paises_nombres)
+indicadores_es  <- setNames(names(opciones_indicadores),     opciones_indicadores)
+proyecciones_es <- setNames(names(opciones_proyecciones),    opciones_proyecciones)
+indicadores_cod <- setNames(names(indicadores_es), indicadores_es)
+
+
+# Constantes para la lógica de exclusividad
+ALL_COUNTRIES_LABEL <- "Todos los países"
+ALL_INDICATORS_LABEL <- "Todos los atributos"
+ALL_PROJECTIONS_LABEL <- "Todas las proyecciones"
+```
+
+Series Temp.
+=============
+Column {.sidebar data-width=300}
+--------------------------------
+```{r}
+# ===========================
+#     SELECTORES PRINCIPALES
+# ===========================
+
+selectInput(
+  "paises_evo", "País:",
+  choices = c(ALL_COUNTRIES_LABEL, opciones_paises_nombres),
+  selected = "Spain"
+)
+
+selectInput(
+  "indicador_evo", "Indicador:",
+  choices = c(ALL_INDICATORS_LABEL, opciones_indicadores),
+  selected = "JAN"
+)
+
+selectInput(
+  "proyeccion_evo", "Proyección:",
+  choices = c(ALL_PROJECTIONS_LABEL, opciones_proyecciones),
+  selected = "BSL",
+  multiple = TRUE
+)
+
+uiOutput("ui_paginas")
+```
+
+Column {data-width=70%}
+-----------------------------
+### Comparativa de evolución
+
+```{r}
+plotlyOutput("plot_evolucion")
+```
+
+```{r}
+#################################
+
+# SERIES TEMPORALES (SERVER)
+
+#################################
+
+# Helper: comprobar si el selector está en modo "Todas las proyecciones"
+
+is_all_proj <- function(sel) {
+!is.null(sel) && length(sel) == 1 && sel == ALL_PROJECTIONS_LABEL
+}
+
+# ===========================
+
+# LÓGICA DE SELECCIÓN
+
+# ===========================
+
+observeEvent(input$paises_evo, {
+req(input$paises_evo, input$indicador_evo, input$proyeccion_evo)
+
+if (input$paises_evo == ALL_COUNTRIES_LABEL) {
+
+if (input$indicador_evo == ALL_INDICATORS_LABEL) {
+  updateSelectInput(session, "indicador_evo", selected = opciones_indicadores[1])
+}
+
+# Si se selecciona "Todos los países", evitamos a la vez "Todas las proyecciones"
+if (is_all_proj(input$proyeccion_evo)) {
+  updateSelectInput(session, "proyeccion_evo", selected = opciones_proyecciones[1])
+}
+
+}
+})
+
+observeEvent(input$proyeccion_evo, {
+req(input$paises_evo, input$indicador_evo, input$proyeccion_evo)
+
+sel <- input$proyeccion_evo
+if (is.null(sel)) return()
+
+# 1) Exclusividad de "Todas las proyecciones"
+
+if (ALL_PROJECTIONS_LABEL %in% sel && length(sel) > 1) {
+updateSelectInput(
+session, "proyeccion_evo",
+selected = ALL_PROJECTIONS_LABEL
+)
+return()
+}
+
+# Releer tras posible update
+
+sel <- input$proyeccion_evo
+if (is.null(sel)) return()
+
+# 2) Si estamos en modo "Todas las proyecciones", forzamos:
+
+# - no "Todos los países"
+
+# - no "Todos los atributos"
+
+if (is_all_proj(sel)) {
+
+if (input$paises_evo == ALL_COUNTRIES_LABEL) {
+  updateSelectInput(session, "paises_evo", selected = "Spain")
+}
+
+if (input$indicador_evo == ALL_INDICATORS_LABEL) {
+  updateSelectInput(session, "indicador_evo", selected = opciones_indicadores[1])
+}
+
+}
+})
+
+observeEvent(input$indicador_evo, {
+req(input$paises_evo, input$indicador_evo, input$proyeccion_evo)
+
+if (input$indicador_evo == ALL_INDICATORS_LABEL) {
+
+# No permitir a la vez "Todos los países"
+if (input$paises_evo == ALL_COUNTRIES_LABEL) {
+  updateSelectInput(session, "paises_evo", selected = "Spain")
+}
+
+# En "Todos los atributos" solo permitimos UNA proyección concreta
+sel_proj <- input$proyeccion_evo
+
+# Si está en "Todas las proyecciones" o hay 0/varias, imponemos la primera proyección (BSL)
+if (is.null(sel_proj) || is_all_proj(sel_proj) || length(sel_proj) != 1) {
+  updateSelectInput(session, "proyeccion_evo", selected = opciones_proyecciones[1])
+}
+
+}
+})
+
+# ===========================
+
+# PAGINACIÓN
+
+# ===========================
+
+items_por_pagina <- 12
+
+lista_elementos_paginados <- reactive({
+req(input$indicador_evo, input$paises_evo, input$proyeccion_evo)
+all_proj_mode <- is_all_proj(input$proyeccion_evo)
+
+# Caso A: paginar países (una o varias proyecciones, pero NO "Todas las proyecciones")
+
+# Caso A: paginar países
+
+if (input$paises_evo == ALL_COUNTRIES_LABEL) {
+
+  # Todos los países disponibles para ese indicador y proyección
+  items <- data_clean %>%
+    filter(
+      indic_de == input$indicador_evo,
+      PROJ     %in% input$proyeccion_evo
+    ) %>%
+    pull(NUTS_NAME) %>%
+    unique()
+
+  prioritarios_cod <- c(
+    "European Union (EU6-1958, EU9-1973, EU10-1981, EU12-1986, EU15-1995, EU25-2004, EU27-2007, EU28-2013, EU27-2020)",
+    "Spain"
+  )
+
+  # Ponemos primero UE y España (si están en items) y luego el resto ordenado
+  prioritarios <- intersect(prioritarios_cod, items)
+  resto        <- setdiff(sort(items), prioritarios)
+
+  items_ordenados <- c(prioritarios, resto)
+
+  return(items_ordenados)
+}
+
+
+# Caso B: paginar indicadores
+
+if (input$indicador_evo == ALL_INDICATORS_LABEL) {
+
+return(
+  data_clean %>%
+    filter(
+      NUTS_NAME == input$paises_evo,
+      PROJ      %in% input$proyeccion_evo
+    ) %>%
+    pull(indic_de) %>% unique() %>% sort()
+)
+
+}
+
+return(NULL)
+})
+
+items_pagina_actual <- reactive({
+items <- lista_elementos_paginados()
+req(items)
+
+pagina <- as.numeric(input$page_num)
+if (is.na(pagina)) pagina <- 1
+
+inicio <- (pagina - 1) * items_por_pagina + 1
+fin    <- min(pagina * items_por_pagina, length(items))
+
+items[inicio:fin]
+})
+
+output$ui_paginas <- renderUI({
+elems <- lista_elementos_paginados()
+if (is.null(elems)) elems <- character(0)
+
+n_paginas <- ceiling(length(elems) / items_por_pagina)
+if (n_paginas < 1) n_paginas <- 1
+
+opciones_pag <- setNames(1:n_paginas, paste("Página", 1:n_paginas))
+
+selectInput(
+"page_num",
+label   = "Páginas:",
+choices = opciones_pag,
+selected = 1
+)
+})
+
+# ===========================
+
+# GRÁFICO PRINCIPAL
+
+# ===========================
+
+output$plot_evolucion <- renderPlotly({
+req(input$indicador_evo, input$paises_evo, input$proyeccion_evo)
+
+all_proj_mode <- is_all_proj(input$proyeccion_evo)
+
+# ----- CASO 1: Paginar países (varios países, 1 indicador, 1+ proyecciones concretas) -----
+
+if (input$paises_evo == ALL_COUNTRIES_LABEL &&
+input$indicador_evo != ALL_INDICATORS_LABEL &&
+!all_proj_mode) {
+
+
+df <- data_clean %>%
+  filter(
+    NUTS_NAME %in% items_pagina_actual(),
+    indic_de  == input$indicador_evo,
+    PROJ      %in% input$proyeccion_evo
+  ) %>%
+  mutate(
+    TIME_PERIOD  = as.numeric(TIME_PERIOD),
+    NUTS_NAME_ES = paises_es[NUTS_NAME],
+    PROJ_ES      = proyecciones_es[PROJ]
+  )
+
+
+    # Ordenar facetas: primero Unión Europea y España
+  orden_base   <- unique(df$NUTS_NAME_ES)
+  prioritarios <- c("Unión Europea", "España")
+  niveles_pais <- c(
+    intersect(prioritarios, orden_base),
+    setdiff(orden_base, prioritarios)
+  )
+
+
+validate(need(nrow(df) > 0, "No hay datos."))
+
+  p <- ggplot(df, aes(
+    x = TIME_PERIOD,
+    y = value,
+    color = PROJ_ES,
+    group = interaction(NUTS_NAME_ES, PROJ_ES),
+    text = paste0(
+      "<b>", NUTS_NAME_ES, "</b><br>",
+      "Proyección: ", PROJ_ES, "<br>",
+      "Año: ", TIME_PERIOD, "<br>",
+      "Valor: ", value
+    )
+  )) +
+    geom_line() +
+    geom_point() +
+    facet_wrap(
+      ~ factor(NUTS_NAME_ES, levels = niveles_pais),
+      scales = "free_y",
+      ncol   = 3
+    ) +
+    theme_minimal() +
+    labs(color = "Proyección")
+
+return(ggplotly(p, tooltip = "text"))
+
+
+}
+
+# ----- CASO 2: "Todas las proyecciones" (comparar proyecciones para 1 país + 1 indicador) -----
+
+if (all_proj_mode) {
+
+
+df <- data_clean %>%
+  filter(
+    NUTS_NAME == input$paises_evo,
+    indic_de  == input$indicador_evo
+  ) %>%
+  mutate(
+    TIME_PERIOD = as.numeric(TIME_PERIOD),
+    PROJ_ES     = proyecciones_es[PROJ]
+  )
+
+validate(need(nrow(df) > 0, "No hay datos."))
+
+p <- ggplot(df, aes(
+  x     = TIME_PERIOD,
+  y     = value,
+  color = PROJ_ES,
+  group = PROJ_ES,
+  text  = paste0(
+    "<b>", PROJ_ES, "</b><br>",
+    "Año: ", TIME_PERIOD, "<br>",
+    "Valor: ", value
+  )
+)) +
+  geom_line(size = 1.1) +
+  geom_point(size = 1.3) +
+  theme_minimal() +
+  labs(color = "Proyección")
+
+return(ggplotly(p, tooltip = "text"))
+
+
+}
+
+# ----- CASO 3: Paginar indicadores (1 país, varios indicadores, 1+ proyecciones) -----
+
+if (input$indicador_evo == ALL_INDICATORS_LABEL) {
+
+  df <- data_clean %>%
+    filter(
+      NUTS_NAME == input$paises_evo,
+      PROJ      %in% input$proyeccion_evo,
+      indic_de  %in% items_pagina_actual()
+    ) %>%
+    mutate(
+      TIME_PERIOD = as.numeric(TIME_PERIOD),
+      INDIC_ES    = indicadores_es[indic_de],
+      PROJ_ES     = proyecciones_es[PROJ]
+    )
+
+  validate(need(nrow(df) > 0, "No hay datos."))
+
+  p <- ggplot(df, aes(
+    x     = TIME_PERIOD,
+    y     = value,
+    color = PROJ_ES,
+    group = interaction(INDIC_ES, PROJ_ES),
+    text  = paste0(
+      "<b>", INDIC_ES, "</b><br>",
+      "Proyección: ", PROJ_ES, "<br>",
+      "Año: ", TIME_PERIOD, "<br>",
+      "Valor: ", value
+    )
+  )) +
+    geom_line() +
+    geom_point(size = 0.8) +
+    facet_wrap(
+      ~ factor(INDIC_ES, levels = unique(INDIC_ES)),
+      scales = "free_y",
+      ncol   = 3
+    ) +
+    theme_minimal() +
+    labs(color = "Proyección")
+
+  return(ggplotly(p, tooltip = "text"))
+}
+
+# ----- CASO 4: Gráfico simple (1 país, 1 indicador, 1+ proyecciones) -----
+
+df <- data_clean %>%
+filter(
+NUTS_NAME == input$paises_evo,
+indic_de  == input$indicador_evo,
+PROJ      %in% input$proyeccion_evo
+) %>%
+mutate(
+TIME_PERIOD  = as.numeric(TIME_PERIOD),
+INDIC_ES     = indicadores_es[indic_de],
+NUTS_NAME_ES = paises_es[NUTS_NAME],
+PROJ_ES      = proyecciones_es[PROJ]
+)
+
+validate(need(nrow(df) > 0, "No hay datos."))
+
+p <- ggplot(df, aes(
+TIME_PERIOD, value,
+color = PROJ_ES,
+group = PROJ_ES,
+text = paste0(
+"<b>", INDIC_ES, "</b><br>",
+"País: ", NUTS_NAME_ES, "<br>",
+"Proyección: ", PROJ_ES, "<br>",
+"Año: ", TIME_PERIOD, "<br>",
+"Valor: ", value
+)
+)) +
+geom_line(size = 1) +
+geom_point(size = 1.2) +
+theme_minimal() +
+labs(color = "Proyección")
+
+ggplotly(p, tooltip = "text")
+})
+```
+
+Mapa
+================
+
+Column {.sidebar data-width=250}
+--------------------------------------------------
+```{r}
+selectInput(
+  "indicador_mapa",
+  label = "Indicador:",
+  choices = opciones_indicadores,
+  selected = opciones_indicadores[1]
+)
+
+sliderInput(
+  "sliderAño_mapa",
+  label = "Año: ",
+  min = min(data_clean$TIME_PERIOD),
+  max = max(data_clean$TIME_PERIOD),
+  value = 2025,
+  step = 1,
+  sep = ""
+)
+
+selectInput(
+  "projection_mapa",
+  label = "Año: ",
+  choices = opciones_proyecciones,
+  selected = "BSL"
+)
+
+HTML("<br><small>Visualización geográfica para nivel NUTS 0 (Países).</small>")
+```
+
+
+Column
+--------------------------------------------------
+
+### Mapa coroplético de indicadores de población {data-height=800}
+
+```{r}
+renderLeaflet({
+  req(input$sliderAño_mapa, input$indicador_mapa, input$projection_mapa)
+
+  indicador_es <- indicadores_es[input$indicador_mapa]
+  proyeccion_es <- proyecciones_es[input$projection_mapa]
+  
+  df <- data_clean %>%
+    filter(
+      TIME_PERIOD == input$sliderAño_mapa,
+      indic_de == input$indicador_mapa,
+      PROJ == input$projection_mapa
+    ) %>%
+    group_by(NUTS_ID, NUTS_NAME) %>%
+    select(NUTS_ID, NUTS_NAME, value)
+
+  # 2. Cruzar datos con el mapa
+  idx <- match(geoj_nuts0@data$NUTS_ID, df$NUTS_ID)
+  valor <- df$value[idx]
+  names_matched <- df$NUTS_NAME[idx]
+  
+  nombres_base <- ifelse(!is.na(names_matched),
+                         names_matched,
+                         geoj_nuts0@data$NUTS_NAME)
+  nombres_es <- ifelse(!is.na(paises_es[nombres_base]),
+                       paises_es[nombres_base],
+                       nombres_base)
+
+  # 3. CREAR ETIQUETAS CON FORMATO % Y 2 DECIMALES
+  etiquetas <- paste0("", nombres_es, "",
+                      " (", geoj_nuts0@data$NUTS_ID, ")",
+                      "Valor: ", round(valor, 2)
+                      )
+
+  etiquetas_html <- lapply(etiquetas, shiny::HTML)
+  # 4. GENERAR MAPA Y AJUSTAR VISTA
+  # Guardamos el mapa base en una variable 'm'
+  m <- MapaCoroplético(
+  geoj = geoj_nuts0,
+  value = valor,
+  region_labels = etiquetas_html,
+  legend_title = paste(indicador_es, "-", proyeccion_es, "|",
+                       input$sliderAño_mapa)
+  )
+  
+  # 5. APLICAR ZOOM Y CENTRADO PERSONALIZADO
+  # lng=10, lat=50 centra en Europa. zoom=3 aleja la cámara para ver contexto.
+  # Si quieres ver TODO el mundo, pon zoom=2
+  m %>% 
+    addTiles() %>%
+    setView(lng = 10, lat = 52, zoom = 3)
+})
+```
+
+Info Regional
+================
+
+Column {.sidebar data-width=300}
+--------------------------------------------------
+```{r}
+# --- SELECTORES ---
+# Usamos las listas creadas en el setup
+selectInput(
+  "pais_detalle", 
+  label = "País / Región: ", 
+  choices = c("Unión Europea", opciones_paises_nombres),
+  selected = "Unión Europea",
+)
+
+selectInput(
+  "indicador_detalle", 
+  label = "Indicador Principal: ", 
+  choices = opciones_indicadores,
+  selected = opciones_indicadores[1]
+)
+
+selectInput(
+  "projection_detalle", 
+  label = "Proyección: ", 
+  choices = opciones_proyecciones,
+  selected = "BSL"
+)
+
+# --- REACTIVE: DATOS DEL PAÍS SELECCIONADO ---
+data_ficha <- reactive({
+  req(input$pais_detalle, input$indicador_detalle, input$projection_detalle)
+  
+  if (input$pais_detalle == "Unión Europea") {
+    # --- CASO ESPECIAL UE ---
+    # Si seleccionas la opción especial, filtramos por el código NUTS_ID
+    data_clean %>% 
+      filter(
+        NUTS_ID == "EU27_2020", # <--- EL CÓDIGO QUE PEDISTE
+        indic_de == input$indicador_detalle,
+        PROJ == input$projection_detalle
+      ) %>% 
+      arrange(TIME_PERIOD)
+    
+  } else {
+    # --- CASO NORMAL PAÍS ---
+    # Si es un país normal, filtramos por su nombre
+    data_clean %>% 
+      filter(
+        NUTS_NAME == input$pais_detalle, 
+        indic_de == input$indicador_detalle,
+        PROJ == input$projection_detalle
+      ) %>% 
+      arrange(TIME_PERIOD)
+  }
+})
+```
+
+Column {data-height=800}
+--------------------------------------------------
+
+### Evolución de atributos
+
+```{r}
+renderPlotly({
+  req(data_ficha())
+  d <- data_ficha()
+  
+  validate(need(nrow(d) > 0, "No hay datos para mostrar la evolución."))
+
+  # Nombre del indicador en español
+  indicador_es <- indicadores_es[input$indicador_detalle]
+
+  p <- ggplot(d, aes(
+      x = TIME_PERIOD, 
+      y = value,
+      text = paste0("Año: ", TIME_PERIOD, "<br>Valor: ", round(value, 2))
+    )) +
+    geom_area(fill = "#3498db", alpha = 0.3) +
+    geom_line(aes(group = 1), linewidth = 1, color="#2980b9") +
+    geom_point(color = "#2c3e50", size = 1.5) +
+    theme_minimal() +
+    labs(
+      title = paste("Evolución de", indicador_es, "en", input$pais_detalle),
+      x = "Año", 
+      y = "Valor"
+    )
+  
+  ggplotly(p, tooltip = "text")
+})
+```
+
+### Distribución por Grupo de Edad y Ratio de Dependencia
+```{r}
+renderPlotly({
+  req(input$pais_detalle)
+  
+  indicadores_usar <- c("PC_Y0_14", "PC_Y15_64", "PC_Y65_MAX", "DEPRATIO1")
+  
+  if (input$pais_detalle == "Unión Europea") {
+    d_animado <- data_clean %>%
+      filter(
+        NUTS_ID == "EU27_2020",
+        indic_de %in% indicadores_usar,
+        PROJ == input$projection_detalle,
+      )
+  } else {
+    d_animado <- data_clean %>% 
+      filter(
+        NUTS_NAME == input$pais_detalle,
+        indic_de %in% indicadores_usar,
+        PROJ == input$projection_detalle
+      )
+  }
+  
+  validate(need(nrow(d_animado) > 0, "No hay datos para mostrar."))
+
+  # Nombre del indicador en español
+  d_animado <- d_animado %>%
+    mutate(indic_es = indicadores_es[indic_de])
+  
+  max_val <- max(d_animado$value, na.rm = TRUE)
+  
+  plot_ly(
+    data = d_animado, 
+    x = ~indic_es, 
+    y = ~value, 
+    type = 'bar', 
+    color = ~indic_es,
+    frame = ~TIME_PERIOD,
+    ids = ~indic_es,
+    hoverinfo = "text",
+    textposition = "none",
+    text = ~paste0("<b>", indic_es, "</b><br>Año: ", TIME_PERIOD,
+                   "<br>Valor: ", round(value, 2), "%")
+  ) %>%
+    layout(
+      title = paste("Evolución indicadores en", input$pais_detalle),
+      xaxis = list(title = "Indicador"),
+      yaxis = list(title = "Valor (%)", range = c(0, max_val * 1.1)),
+      showlegend = FALSE,
+      margin = list(b = 100)
+    ) %>%
+    animation_opts(
+      frame = 1000,
+      easing = "linear",
+      redraw = FALSE
+    ) %>%
+    animation_button(
+      x = 0, xanchor = "left", y = -0.25, label = "▶ Reproducir"
+    ) %>%
+    animation_slider(
+      currentvalue = list(prefix = "Año: ", font = list(color="red"))
+    )
+})
+```
+
+ARIMA
+================
+
+Column {.sidebar data-width=300}
+--------------------------------------------------
+```{r}
+selectInput("pais_pred",
+            "País:",
+            choices = c("Unión Europea",
+                        opciones_paises_nombres),
+            selected = "Unión Europea")
+
+selectInput("indic_pred",
+            "Indicador:", 
+            choices = opciones_indicadores,
+            selected = opciones_indicadores[1])
+
+selectInput("proj_pred",
+            "Proyección:",
+            choices = opciones_proyecciones,
+            selected = "BSL")
+
+hr() 
+actionButton("run_pred",
+             "Calcular Predicción",
+             icon = icon("play"),
+             class = "btn-primary")
+```
+
+Column {data-height=800}
+--------------------------------------------------
+```{r}
+# --- 1. PREPARACIÓN DE DATOS ---
+data_to_model <- eventReactive(input$run_pred, {
+  req(input$pais_pred, input$indic_pred, input$proj_pred)
+  
+  if (input$pais_pred == "Unión Europea") {
+    # Caso UE: Buscamos por ID
+    data_clean %>%
+      filter(NUTS_ID == "EU27_2020",
+             indic_de == input$indic_pred,
+             PROJ == input$proj_pred) %>%
+      arrange(TIME_PERIOD) %>%
+      as_tsibble(index = TIME_PERIOD) %>%
+      fill_gaps()
+  } else {
+    # Caso País: Buscamos por nombre
+    data_clean %>%
+      filter(NUTS_NAME == input$pais_pred,
+             indic_de == input$indic_pred,
+             PROJ == input$proj_pred) %>%
+      arrange(TIME_PERIOD) %>%
+      as_tsibble(index = TIME_PERIOD) %>%
+      fill_gaps() 
+  }
+})
+
+# --- 2. MODELADO (fable) ---
+fitted_model <- eventReactive(input$run_pred, {
+  datos_ts <- data_to_model()
+  validate(need(nrow(datos_ts) > 5, "Datos insuficientes para el modelo (>5 años necesarios)."))
+  
+  datos_ts %>% model(ARIMA(value, stepwise = TRUE))
+})
+
+# --- 3. PREDICCIÓN (forecast) ---
+forecast_data <- eventReactive(input$run_pred, {
+  fitted_model() %>% forecast(h = 10) # Predicción a 3 años
+})
+```
+
+### Modelo con los Datos
+```{r}
+renderPlotly({
+  validate(need(input$run_pred > 0, "Pulsa 'Calcular Predicción'."))
+  
+  p <- GraficoDinamicoArima95CI(
+    data = data_to_model(),
+    date = "TIME_PERIOD",
+    value = "value", 
+    prediccion = forecast_data(),
+    TITLE = paste("Predicción ARIMA:", input$pais_pred)
+  )
+  
+  p %>% layout(
+    font = list(family = "Arial"),
+    xaxis = list(title = "Año", tickformat = "d")
+  )
+})
+```
+
+### Comparación Datos - Modelo
+```{r}
+renderPlotly({ 
+  validate(need(input$run_pred > 0, "Calculando..."))
+  
+  modelo <- fitted_model()
+  
+  # 1. Datos históricos
+  datos_ajustados <- broom::augment(modelo)
+  df_plot <- as.data.frame(datos_ajustados)
+
+  # 2. Datos futuros
+  pred_raw <- as.data.frame(forecast_data())
+
+  # --- EL TRUCO PARA QUITAR EL HUECO ---
+  # Cogemos el último punto real (ej: año 2100)
+  ultimo_punto_historia <- tail(df_plot, 1)
+  
+  # Creamos un punto de "enganche" para la línea roja
+  punto_enganche <- data.frame(
+    TIME_PERIOD = ultimo_punto_historia$TIME_PERIOD,
+    .mean = ultimo_punto_historia$value
+  )
+  
+  # Pegamos el enganche al principio de la predicción
+  pred_conectada <- bind_rows(
+    punto_enganche, 
+    pred_raw %>% select(TIME_PERIOD, .mean)
+  )
+  # -------------------------------------
+
+  plot_ly() %>%
+    # Línea Negra: Historia
+    add_lines(
+      data = df_plot, x = ~TIME_PERIOD, y = ~value, 
+      name = "Dato Real", 
+      line = list(color = "black", width = 2)
+    ) %>%
+    # Línea Roja Punteada: Ajuste Pasado
+    add_lines(
+      data = df_plot, x = ~TIME_PERIOD, y = ~.fitted,
+      name = "Ajuste (Pasado)", 
+      line = list(color = "#e74c3c", width = 2, dash = "dot") 
+    ) %>%
+    # Línea Roja Sólida: Futuro (AHORA CONECTADA)
+    add_lines(
+      data = pred_conectada, x = ~TIME_PERIOD, y = ~.mean,
+      name = "Predicción Futura",
+      line = list(color = "#e74c3c", width = 2)
+    ) %>%
+    layout(
+      title = "Proyección Continua",
+      # ARREGLO VISUAL DEL EJE X
+      xaxis = list(title = "Año", tickformat = "d"),
+      yaxis = list(title = "Valor"),
+      font = list(family = "Arial"),
+      legend = list(orientation = "h", x = 0.2, y = -0.2)
+    )
+})
+```
+
+Tendencias
+================
+
+Column {.sidebar data-width=300}
+--------------------------------------------------
+```{r}
+selectInput(
+  "pais_yj", 
+  label = "País / Región:", 
+  choices = c("Unión Europea", opciones_paises_nombres), 
+  selected = "Unión Europea"
+)
+
+selectInput(
+  "indic_yj", 
+  label = "Indicador:", 
+  choices = opciones_indicadores, 
+  selected = opciones_indicadores[1]
+)
+
+selectInput(
+  "proj_yj",
+  "Proyección:",
+  choices = opciones_proyecciones,
+  selected = "BSL")
+
+hr()
+h4("Diagnóstico Estadístico")
+
+renderUI({
+  req(modelos_yj())
+  res <- modelos_yj()
+  
+  # Calculamos mejora porcentual del R2
+  mejora <- (res$r2_opt - res$r2_orig) * 100
+  
+  icono_mejora <- if(mejora > 1) "fa-check-circle" else "fa-minus-circle"
+  color_mejora <- if(mejora > 1) "green" else "orange"
+  
+  HTML(paste0(
+    "<div style='background-color:rgba(0,0,0,0.05); padding:15px; border-radius:5px; border: 1px solid #ddd;'>",
+    "<b>Lambda Óptimo (lambda):</b> ", round(res$lambda, 3), "<br>",
+    "<small><i>(Si es distinto de 1, la tendencia no es lineal)</i></small><br><br>",
+    
+    "<b>Ajuste Lineal Base (R^2):</b> ", round(res$r2_orig, 3), "<br>",
+    "<b>Ajuste Transformado (R^2):</b> ", round(res$r2_opt, 3), "<br><br>",
+    
+    "<hr>",
+    "<i class='fa ", icono_mejora, "' style='color:", color_mejora, "'></i> ",
+    "<b>Mejora del modelo:</b> <span style='color:", color_mejora, "'>+", round(mejora, 1), "%</span>",
+    "</div>"
+  ))
+})
+```
+
+Column {data-height=800}
+--------------------------------------------------
+
+### Modelo 1: Regresión Lineal Simple (Datos Originales)
+```{r}
+modelos_yj <- reactive({
+  req(input$pais_yj, input$indic_yj, input$proj_yj)
+  
+  if (input$pais_yj == "Unión Europea"){
+    df <- data_clean %>%
+      filter(
+        NUTS == "EU27_2020",
+        indic_de == input$indic_yj,
+        PROJ == input$proj_yj
+      ) %>%
+      arrange(TIME_PERIOD)
+  } else {
+    df <- data_clean %>%
+      filter(
+        NUTS_NAME == input$pais_yj,
+        indic_de == input$indic_yj,
+        PROJ == input$proj_yj
+      ) %>%
+      arrange(TIME_PERIOD)
+  }
+  
+  # 2. Variables para el modelo
+  x <- df$TIME_PERIOD
+  y <- df$value  # OJO: value en plural, como en tu setup
+  
+  # 3. Modelo Original (Lineal simple)
+  mod_orig <- lm(y ~ x)
+  r2_orig <- summary(mod_orig)$r.squared
+
+  # 4. Optimización Yeo-Johnson
+  # Usamos tryCatch por si la optimización matemática falla
+  lambda_opt <- tryCatch({
+    optimize.yeojohnson.R2(x, y)
+  }, error = function(e) return(1)) 
+  
+  # 5. Transformación de datos
+  y_trans <- yeo.johnson(y, lambda_opt)
+  
+  # 6. Modelo Transformado
+  mod_opt <- lm(y_trans ~ x)
+  r2_opt <- summary(mod_opt)$r.squared
+  
+  list(
+    df = df,
+    lambda = lambda_opt,
+    y_trans = y_trans,
+    r2_orig = r2_orig,
+    r2_opt = r2_opt
+  )
+})
+
+renderPlotly({
+  res <- modelos_yj()
+  df <- res$df
+  
+  p <- ggplot(df, aes(x = TIME_PERIOD, y = value)) +
+    geom_point(color = "#2c3e50", alpha = 0.7, size = 2) +
+    # geom_smooth dibuja la recta de regresión (lm) con intervalo de confianza
+    geom_smooth(method = "lm", se = TRUE, color = "#e74c3c", fill = "#e74c3c", alpha = 0.1) +
+    labs(
+      title = paste0("Tendencia Lineal Original (R² = ", round(res$r2_orig, 3), ")"),
+      subtitle = "Ajuste lineal sobre los datos crudos",
+      x = "Año", y = "Valor Original"
+    ) +
+    theme_minimal()
+  
+  ggplotly(p) %>% layout(font = list(family = "Arial"))
+})
+```
+
+### Modelo 2: Optimización Yeo-Johnson (Datos Transformados)
+```{r}
+renderPlotly({
+  res <- modelos_yj()
+  df <- res$df
+  df$y_transformed <- res$y_trans # Añadimos la variable transformada al dataframe temporal
+  
+  p <- ggplot(df, aes(x = TIME_PERIOD, y = y_transformed)) +
+    geom_point(color = "#2980b9", alpha = 0.7, size = 2) +
+    geom_smooth(method = "lm", se = TRUE, color = "#2980b9", fill = "#2980b9", alpha = 0.1) +
+    labs(
+      title = paste0("Tendencia Lineal Optimizada (R² = ", round(res$r2_opt, 3), ")"),
+      subtitle = paste0("Datos transformados (Lambda = ", round(res$lambda, 3), ")"),
+      x = "Año", y = "Valor Transformado (Escala Y-J)"
+    ) +
+    theme_minimal()
+  
+  ggplotly(p) %>% layout(font = list(family = "Arial"))
+})
+```
+
+Comparación Atr.
+================
+Column {.sidebar data-width=300}
+--------------------------------------------------
+### Configuración
+```{r}
+selectInput(
+  "year_comp_atr", 
+  "Año:", 
+  choices = c("Media Histórica" = "mean", sort(unique(data_clean$TIME_PERIOD), decreasing = TRUE)),
+  selected = "mean"
+)
+
+selectInput(
+  "proj_vars", 
+  "Proyección de las variables", 
+  choices = opciones_proyecciones, 
+  selected = "BSL"
+)
+
+hr()
+
+selectInput(
+  "var_x", 
+  "Variable X (Horizontal):", 
+  choices = opciones_indicadores, 
+  selected = opciones_indicadores[1]
+)
+
+sel_y <- if(length(opciones_indicadores)>1) opciones_indicadores[2] else opciones_indicadores[1]
+
+selectInput(
+  "var_y", 
+  "Variable Y (Vertical):", 
+  choices = opciones_indicadores, 
+  selected = sel_y
+)
+
+hr()
+
+selectInput(
+  "x_scale", "Transformación X:", 
+  choices = c("Ninguna"="none", "Logaritmo"="log", "Raíz Cuadrada"="sqrt"), 
+  selected = "none"
+)
+
+selectInput(
+  "y_scale", "Transformación Y:", 
+  choices = c("Ninguna"="none", "Logaritmo"="log", "Yeo-Johnson"="YeoJohnson"), 
+  selected = "none"
+)
+```
+
+```{r}
+# --- PROCESAMIENTO DE DATOS ---
+model_comp <- reactive({
+  req(input$year_comp_atr, input$var_x, input$var_y, input$proj_vars)
+  
+  df_filtered <- data_clean %>%
+    filter(indic_de %in% c(input$var_x, input$var_y),
+           PROJ == input$proj_vars)
+  
+  # 2. Filtramos por año o media
+  if(input$year_comp_atr != "mean") {
+    df_filtered <- df_filtered %>%
+      filter(TIME_PERIOD == as.numeric(input$year_comp_atr)) %>%
+      select(NUTS_NAME, indic_de, value)
+  } else {
+    df_filtered <- df_filtered %>%
+      group_by(NUTS_NAME, indic_de) %>%
+      summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+  }
+  
+  # 3. Pivotar (Convertir a columnas X e Y)
+  df_wide <- df_filtered %>%
+    pivot_wider(names_from = indic_de, values_from = value) %>%
+    # Renombramos dinámicamente para facilitar el código siguiente
+    rename(X = .data[[input$var_x]], Y = .data[[input$var_y]]) %>%
+    na.omit() # Eliminamos solo si falta X o Y (no si falta otro indicador)
+  
+  validate(need(nrow(df_wide) > 2, "No hay suficientes datos coincidentes para estos dos indicadores."))
+  
+  # 4. Transformaciones matemáticas
+  # Eje X
+  if(input$x_scale == "log") df_wide$X <- log(abs(df_wide$X) + 1)
+  if(input$x_scale == "sqrt") df_wide$X <- sqrt(abs(df_wide$X))
+  
+  # Eje Y
+  lambda <- 1
+  if(input$y_scale == "log") df_wide$Y <- log(abs(df_wide$Y) + 1)
+  if(input$y_scale == "YeoJohnson") {
+    lambda <- tryCatch({ optimize.yeojohnson.R2(df_wide$X, df_wide$Y) }, error = function(e) 1)
+    df_wide$Y <- yeo.johnson(df_wide$Y, lambda)
+  }
+  
+  # 5. Modelo Lineal
+  fit <- lm(Y ~ X, data = df_wide)
+  
+  list(df = df_wide, model = fit, lambda = lambda)
+})
+```
+
+### Resultados de la Regresión
+```{r}
+renderUI({
+  req(model_comp())
+  res <- model_comp()
+  fit <- res$model
+  
+  r2 <- summary(fit)$r.squared
+  correlacion <- cor(res$df$X, res$df$Y)
+  slope <- coef(fit)[2]
+  intercept <- coef(fit)[1]
+  
+  texto_lambda <- ""
+  if(input$y_scale == "YeoJohnson") {
+    texto_lambda <- paste0("<br><strong>Lambda (Y-J):</strong> ", round(res$lambda, 3))
+  }
+  
+  HTML(paste0(
+    "<div style='padding:10px; background-color:#f9f9f9; border:1px solid #ddd; margin-bottom:10px;'>",
+    "<strong>Correlación (r):</strong> ", round(correlacion, 3), " | ",
+    "<strong>R²:</strong> ", round(r2, 3), 
+    texto_lambda, "<br>",
+    "<small>Ecuación: Y = ", round(slope, 3), "*X + ", round(intercept, 3), "</small>",
+    "</div>"
+  ))
+})
+```
+
+Column
+--------------------------------------------------
+
+### Gráfico de Dispersión (Comparativa)
+```{r}
+renderPlotly({
+  req(model_comp())
+  res <- model_comp()
+  df <- res$df
+  
+  # Etiquetas para los ejes
+  lbl_x <- paste0(input$var_x, ifelse(input$x_scale!="none", paste0(" (",input$x_scale,")"), ""))
+  lbl_y <- paste0(input$var_y, ifelse(input$y_scale!="none", paste0(" (",input$y_scale,")"), ""))
+  
+  p <- ggplot(df, aes(x = X, y = Y)) +
+    geom_point(aes(text = NUTS_NAME), color = "#2c3e50", alpha = 0.7, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, color = "#e74c3c", fill = "#e74c3c", alpha = 0.15) +
+    labs(
+      title = paste("Relación:", input$var_x, "vs", input$var_y),
+      x = lbl_x, 
+      y = lbl_y
+    ) +
+    theme_minimal() +
+    theme(text = element_text(family = "Arial"))
+  
+  ggplotly(p, tooltip = "text")
+})
+```
+
+
+
+Comparación
+================
+
+Column {.sidebar data-width=300}
+--------------------------------------------------
+```{r}
+# 1. Selector de Indicador
+selectInput(
+  "indic_comp_analisis",
+  "Indicador:",
+  choices = opciones_indicadores,
+  selected = opciones_indicadores[1]
+)
+
+selectInput(
+  "proj_comp", 
+  "Proyección del índice:", 
+  choices = opciones_proyecciones, 
+  selected = "BSL"
+)
+
+selectInput(
+  "paises_lista_comp",
+  "Países a comparar (Elige varios):",
+  choices = c("Unión Europea", opciones_paises_nombres),
+  # Seleccionamos por defecto la Media y algunos grandes para comparar
+  selected = c("Unión Europea", "Spain", "France", "Germany", "Italy"), 
+  multiple = TRUE
+)
+
+sliderInput(
+  "año_comp_analisis",
+  "Año (Para gráfico de barras):",
+  min = 2022,
+  max = max(data_clean$TIME_PERIOD),
+  value = 2022, 
+  step = 1,
+  sep = ""
+)
+```
+
+Column {.tabset}
+--------------------------------------------------
+
+### Matriz de Correlación
+```{r}
+renderPlotly({
+  req(input$indic_comp_analisis, input$paises_lista_comp, input$proj_comp)
+  
+  df_base <- data_clean %>%
+    filter(indic_de == input$indic_comp_analisis,
+           PROJ     == input$proj_comp)
+  
+  datos_corr <- df_base %>%
+    filter(
+      (NUTS_NAME %in% input$paises_lista_comp & NUTS_NAME != "Unión Europea") |
+      (NUTS_ID == "EU27_2020" & "Unión Europea" %in% input$paises_lista_comp)
+    ) %>%
+    mutate(
+      etiqueta = dplyr::case_when(
+        NUTS_ID == "EU27_2020" ~ "Unión Europea",
+        TRUE ~ ifelse(!is.na(paises_es[NUTS_NAME]), paises_es[NUTS_NAME], NUTS_NAME)
+      )
+    ) %>%
+    select(TIME_PERIOD, etiqueta, value) %>%
+    tidyr::pivot_wider(names_from = etiqueta, values_from = value) %>%
+    select(-TIME_PERIOD)
+
+  validate(need(ncol(datos_corr) > 1, "No hay suficientes países para correlación."))
+
+  M <- cor(datos_corr, use = "complete.obs")
+  plot_correlation(M, show_value = TRUE)
+})
+```
+
+### Comparativa Regional
+
+```{r}
+renderPlotly({
+  req(input$indic_comp_analisis, input$paises_lista_comp,
+      input$año_comp_analisis, input$proj_comp)
+  
+  df_base <- data_clean %>% 
+    filter(
+      indic_de    == input$indic_comp_analisis,
+      TIME_PERIOD == input$año_comp_analisis,
+      PROJ        == input$proj_comp
+    )
+    
+  datos_ranking <- df_base %>%
+    filter(
+      (NUTS_NAME %in% input$paises_lista_comp & NUTS_NAME != "Unión Europea") |
+      (NUTS_ID == "EU27_2020" & "Unión Europea" %in% input$paises_lista_comp)
+    ) %>%
+    mutate(
+      etiqueta = dplyr::case_when(
+        NUTS_ID == "EU27_2020" ~ "Unión Europea",
+        TRUE ~ ifelse(!is.na(paises_es[NUTS_NAME]), paises_es[NUTS_NAME], NUTS_NAME)
+      )
+    ) %>%
+    arrange(desc(value))
+  
+  validate(need(nrow(datos_ranking) > 0, "No hay datos para este año."))
+
+  datos_ranking <- datos_ranking %>% 
+    mutate(
+      Color = dplyr::case_when(
+        NUTS_ID == "ES"        ~ "España",
+        NUTS_ID == "EU27_2020" ~ "Media UE",
+        TRUE                   ~ "Otros"
+      )
+    )
+  
+  indicador_es <- indicadores_es[input$indic_comp_analisis]
+  
+  plot_ly(
+    datos_ranking, 
+    x = ~reorder(etiqueta, -value), 
+    y = ~value, 
+    type  = 'bar', 
+    color = ~Color, 
+    colors = c("España" = "#FF0000", "Media UE" = "#0000FF", "Otros" = "#CCCCCC"),
+    text = ~round(value, 2),
+    textposition = 'auto'
+  ) %>% 
+    layout(
+      title = paste("Ranking:", indicador_es, "(Año", input$año_comp_analisis, ")"), 
+      xaxis = list(title = ""), 
+      yaxis = list(title = "Valor"), 
+      font  = list(family = "Arial")
+    )
+})
+```
+
+PCA
+================
+
+Column {.sidebar data-width=300}
+--------------------------------------------------
+```{r}
+# 1. Selector de Año
+  selectInput(
+    "yearAtr", 
+    label = "Año del análisis:",
+    choices = c("Media Histórica" = "mean",
+                sort(unique(data_clean$TIME_PERIOD[
+                  data_clean$TIME_PERIOD >= 2022]),
+                  decreasing = TRUE)),
+    selected = "mean"
+)
+
+selectInput(
+  "proj_pca", 
+  "Proyección del índice:", 
+  choices = opciones_proyecciones, 
+  selected = "BSL"
+)
+
+hr()
+
+# 2. Selectores de Ejes PCA
+tags$div(
+  style = "display:flex; gap:20px; align-items:center; flex-wrap:wrap;",
+  tags$div(
+    style="display:flex; align-items:center; gap:6px; min-width:120px;",
+    tags$label("Eje X (PC):", style="margin-bottom:0;"),
+    numericInput("PCx", label = NULL, value=1, min=1, max=10, step=1, width = "60px")
+  ),
+  tags$div(
+    style="display:flex; align-items:center; gap:6px; min-width:120px;",
+    tags$label("Eje Y (PC):", style="margin-bottom:0;"),
+    numericInput("PCy", label = NULL, value=2, min=1, max=10, step=1, width = "60px")
+  )
+)
+```
+
+```{r}
+# --- PROCESAMIENTO INTELIGENTE DE DATOS ---
+inputs_atributos <- reactive({
+  req(input$yearAtr, input$proj_pca)
+  
+  # Quitamos UE y Zona Euro del análisis
+  opciones_paises_filtrados <- opciones_paises_nombres[
+    !(names(opciones_paises_nombres) %in% c("Zona Euro", "Unión Europea"))
+  ]
+  
+  # Paso 1: Filtrar por año o calcular media
+  if (input$yearAtr != "mean") {
+    year_limit <- as.numeric(input$yearAtr)
+    
+    df_base <- data_clean %>%
+      filter(
+        TIME_PERIOD == year_limit,
+        PROJ        == input$proj_pca,
+        NUTS_NAME   %in% opciones_paises_filtrados
+      ) %>%
+      select(NUTS_NAME, indic_de, value)
+    
+  } else {
+    
+    df_base <- data_clean %>%
+      filter(
+        NUTS_NAME %in% opciones_paises_filtrados,
+        PROJ      == input$proj_pca
+      ) %>%
+      group_by(NUTS_NAME, indic_de) %>%
+      summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+  }
+  
+  # Paso 2: Pivotar (Filas = Países, Columnas = Indicadores)
+  df_pca <- df_base %>%
+    tidyr::pivot_wider(
+      names_from  = indic_de,
+      values_from = value
+    ) %>%
+    # Añadir nombre del país en español
+    mutate(
+      NUTS_NAME_ES = ifelse(
+        !is.na(paises_es[NUTS_NAME]),
+        paises_es[NUTS_NAME],
+        NUTS_NAME
+      )
+    ) %>%
+    select(-NUTS_NAME) %>%                 # quitamos el nombre en inglés
+    tibble::column_to_rownames("NUTS_NAME_ES") %>%
+    na.omit()
+  
+  # Paso 3: Renombrar columnas a español (indicadores)
+  cods <- colnames(df_pca)
+  col_es <- ifelse(
+    !is.na(indicadores_es[cods]),
+    indicadores_es[cods],
+    cods
+  )
+  colnames(df_pca) <- col_es
+  
+  return(df_pca)
+})
+
+
+# --- CÁLCULO PCA ---
+pca_calc <- reactive({
+  req(inputs_atributos())
+  data <- inputs_atributos()
+  
+  # Validación de seguridad:
+  validate(need(nrow(data) > 3, "No hay suficientes países con datos completos para hacer PCA."))
+  validate(need(ncol(data) > 1, "Se necesitan al menos 2 indicadores para hacer PCA."))
+  
+  # Eliminar columnas con varianza 0 (constantes) para evitar errores matemáticos
+  data <- data[, apply(data, 2, var) != 0]
+  
+  prcomp(data, scale. = TRUE)
+})
+```
+
+
+Column {.tabset}
+--------------------------------------------------
+### Atributos Seleccionados
+
+```{r}
+renderTable({
+  req(inputs_atributos())
+  inputs_atributos() %>% 
+    as_tibble(rownames = "Territorio") %>% 
+    head(20)
+})
+```
+
+### Matriz de Correlación
+
+```{r}
+renderPlotly({
+  req(inputs_atributos())
+  
+  M <- cor(inputs_atributos(), use = "complete.obs")
+
+  nombres_largos <- colnames(M)
+  codigos <- indicadores_cod[nombres_largos]
+  etiquetas_cortas <- ifelse(is.na(codigos), nombres_largos, codigos)
+  
+  colnames(M) <- etiquetas_cortas
+  rownames(M) <- etiquetas_cortas
+  
+  plot_correlation(M, show_value = TRUE) %>%
+    layout(
+      xaxis = list(tickangle = -45, tickfont = list(size = 9)),
+      yaxis = list(tickfont = list(size = 9)),
+      margin = list(b = 120, l = 150)
+    )
+})
+```
+
+### Atributos Estandarizados
+
+```{r}
+renderTable({
+  req(inputs_atributos())
+  inputs_atributos() %>%
+    scale() %>%
+    as_tibble(rownames = "Territorio") %>%
+    head(20)
+})
+```
+
+### PCAs
+
+```{r}
+renderTable({
+  req(pca_calc())
+  pca_calc()$x %>%
+    as_tibble(rownames = "Territorio") %>%
+    head(20)
+})
+```
+
+### Pesos combinación lineal PCAs
+
+```{r}
+renderTable({
+  req(pca_calc())
+  pca_calc()$rotation %>%
+    as_tibble(rownames = "Indicador Original")
+})
+```
+
+### Varianza Explicada
+
+```{r}
+renderPlotly({
+  req(pca_calc())
+  pca <- pca_calc()
+  
+  plot_data <- tibble(
+    label = factor(paste0("PC", 1:length(pca$sdev)), levels = paste0("PC", 1:length(pca$sdev))),
+    var_frac = pca$sdev^2 / sum(pca$sdev^2) 
+  ) %>%
+    slice(1:10) %>%
+    mutate(tooltip_text = paste0(
+      "Componente: ", label, "\n",
+      "Varianza: ", percent(var_frac, accuracy = 0.1)
+    ))
+
+  p <- ggplot(plot_data, aes(x = label, y = var_frac, text = tooltip_text)) +
+    geom_bar(stat = "identity", fill = "#3498db") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    labs(x = "Componentes Principales", y = "% Varianza Explicada") +
+    theme_minimal()
+  
+  ggplotly(p, tooltip = "text")
+})
+```
+
+### Visualización PCAs
+
+```{r}
+renderHighchart({
+  req(pca_calc(), input$PCx, input$PCy)
+  
+  hchart(pca_calc(), choices = c(input$PCx, input$PCy)) %>%
+    hc_title(text = "Mapa de Similitud Regional (PCA)") %>%
+    hc_subtitle(text = "Países cercanos tienen perfiles similares") %>%
+    hc_tooltip(pointFormat = "<b>{point.name}</b><br>X: {point.x:.2f}<br>Y: {point.y:.2f}") %>%
+    hc_add_theme(hc_theme_smpl())
+})
+```
+
