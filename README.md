@@ -7,7 +7,7 @@ temporales y análisis multivariante. Datos oficiales de **Eurostat**.
 ![Población joven frente a población envejecida](img/demografia.png)
 
 > 📊 **Dashboard interactivo (Shiny):** se ejecuta en local — ver [Cómo ejecutarlo](#cómo-ejecutarlo)
-> 📄 **Memoria del proyecto:** https://xami650.github.io/poblacion-envejecida-europa/
+> 📄 **Memoria del proyecto:** [https://xami650.github.io/old_europe/]
 
 ## Vista del cuadro de mandos
 
